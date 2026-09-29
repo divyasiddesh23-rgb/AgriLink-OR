@@ -36,6 +36,7 @@ export interface MetaResponse {
   districts_total: number;
   crops_total: number;
   districts: string[];
+  states?: string[];
   mandis_geo: number;
   mandis_centroid: number;
   farms: Farm[];

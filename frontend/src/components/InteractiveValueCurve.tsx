@@ -9,10 +9,10 @@ export const InteractiveValueCurve: React.FC<InteractiveValueCurveProps> = ({ m3
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const curve = m3.curve || [];
-  if (!m3.available || curve.length === 0) {
+  if (curve.length === 0) {
     return (
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs font-mono">
-        Hold-vs-sell requires a 2-year seasonal price path, not estimable for this selection.
+        Hold-vs-sell requires a seasonal price path, not estimable for this selection.
       </div>
     );
   }

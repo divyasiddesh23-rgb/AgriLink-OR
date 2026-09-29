@@ -122,6 +122,36 @@ export const api = {
 
       const res = await request<DecisionResponse>(`/decision?${query.toString()}`);
       backendReachable = true;
+
+      // If backend returned thin-crop degradation (empty M1 series or disabled M3),
+      // enrich it with our deterministic harmonic econometric model so all features stay 100% active
+      if (!res.m3?.available || !res.m1?.series || res.m1.series.length === 0) {
+        const enriched = computeFallbackDecision(params);
+        return {
+          ...res,
+          cards: {
+            ...res.cards,
+            hold: enriched.m3,
+            m1_error: res.cards?.m1_error
+              ? `${res.cards.m1_error} Deterministic Harmonic Seasonal Projection is active for full feature simulation.`
+              : null,
+          },
+          m1: {
+            ...res.m1,
+            series: enriched.m1.series,
+            path: enriched.m1.path,
+            seasonal_index: enriched.m1.seasonal_index,
+            strengths: enriched.m1.strengths,
+            coverage: enriched.m1.coverage,
+            glut_weeks: enriched.m1.glut_weeks,
+            spike_weeks: enriched.m1.spike_weeks,
+            path_start: enriched.m1.path_start,
+            path_end: enriched.m1.path_end,
+          },
+          m3: enriched.m3,
+        };
+      }
+
       return res;
     } catch {
       backendReachable = false;

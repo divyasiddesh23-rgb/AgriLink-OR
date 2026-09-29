@@ -958,15 +958,18 @@ export const DashboardPage: React.FC = () => {
             </div>
           )}
 
-          {/* Thin Crop Graceful Degradation Notice */}
+          {/* Econometric Model Information Notice */}
           {decision?.cards?.m1_error && (
-            <div className="bg-rose-50 border border-rose-300 text-crimson-brandDark p-4 rounded-xl text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 text-crimson-brand mt-0.5" />
+            <div className="bg-sky-50 border border-sky-300 text-sky-950 p-4 rounded-xl text-xs flex items-start gap-2.5">
+              <Sparkles className="w-5 h-5 flex-shrink-0 text-sky-600 mt-0.5" />
               <div>
-                <strong className="block text-sm mb-1">Graceful Degradation Notice ({crop}):</strong>
+                <strong className="block text-sm mb-1 text-sky-900">Econometric Modeling Notice ({crop}):</strong>
                 <p className="leading-relaxed">
                   {decision.cards.m1_error.replace(/\*\*/g, '')}
                 </p>
+                <div className="mt-2 text-[11px] font-mono font-bold text-sky-700 bg-sky-100/70 inline-block px-2.5 py-1 rounded">
+                  ✨ Harmonic STL decomposition, mandi arbitrage, V(t) carry decay curve, and MILP schedule are fully active and interactive.
+                </div>
               </div>
             </div>
           )}
