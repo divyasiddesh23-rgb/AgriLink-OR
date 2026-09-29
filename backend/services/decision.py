@@ -340,6 +340,7 @@ def build_meta(session: Session) -> dict:
         "districts_total": int(df["district"].nunique()),
         "crops_total": int(df["commodity"].nunique()),
         "districts": sorted(str(d) for d in df["district"].unique()),
+        "states": sorted(str(s) for s in df["state"].unique()) if "state" in df.columns else ["Karnataka"],
         "mandis_geo": int(mandis["lat"].notna().sum()),
         "mandis_centroid": int((mandis["source"] == "district_fallback").sum()),
         "farms": _records(farms),

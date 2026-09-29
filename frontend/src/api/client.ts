@@ -5,7 +5,10 @@ import type {
   MetaResponse,
 } from './types';
 
-const API_BASE = 'http://localhost:8000/api';
+const rawApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const API_BASE = rawApiUrl
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`)
+  : 'http://localhost:8000/api';
 
 class ApiError extends Error {
   status: number;
