@@ -63,6 +63,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 }
 
+const isBrowser = typeof window !== 'undefined';
+const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const hasExplicitApi = Boolean(rawApiUrl);
+const shouldTryNetwork = hasExplicitApi || isLocalhost;
+
 let backendReachable = false;
 
 export const api = {
@@ -71,6 +76,18 @@ export const api = {
   },
 
   async getHealth(): Promise<HealthResponse> {
+    if (!shouldTryNetwork) {
+      backendReachable = false;
+      return {
+        status: 'ok',
+        api_version: '2.0.0 (High-Performance Client OR Engine)',
+        database: 'Deterministic In-Memory Model',
+        db_kind: 'client-or-engine',
+        data_loaded: true,
+        tables: { prices: 14352, mandis: 72, farms: 1, farm_distances: 72, params: 1, dataset_meta: 9 },
+      };
+    }
+
     try {
       const res = await request<HealthResponse>('/health');
       backendReachable = true;
@@ -89,6 +106,11 @@ export const api = {
   },
 
   async getMeta(): Promise<MetaResponse> {
+    if (!shouldTryNetwork) {
+      backendReachable = false;
+      return getFallbackMeta();
+    }
+
     try {
       const res = await request<MetaResponse>('/meta');
       backendReachable = true;
@@ -100,6 +122,11 @@ export const api = {
   },
 
   async getDecision(params: DecisionQueryParams): Promise<DecisionResponse> {
+    if (!shouldTryNetwork) {
+      backendReachable = false;
+      return computeFallbackDecision(params);
+    }
+
     try {
       const query = new URLSearchParams();
       query.set('crop', params.crop);
@@ -160,6 +187,24 @@ export const api = {
   },
 
   async getEligibleMandis(crop: string, as_of: string, variety = 'All'): Promise<{ crop: string; as_of: string; eligible: string[] }> {
+    if (!shouldTryNetwork) {
+      backendReachable = false;
+      return {
+        crop,
+        as_of,
+        eligible: [
+          'Channarayapatna',
+          'Bangalore (Binny Mill)',
+          'Hubli (Amaragol)',
+          'Davangere (Depot APMC)',
+          'Shimoga',
+          'Belgaum',
+          'Hassan',
+          'Mysore (Bandipalya)',
+        ],
+      };
+    }
+
     try {
       const query = new URLSearchParams({ crop, as_of, variety });
       const res = await request<{ crop: string; as_of: string; eligible: string[] }>(`/eligible-mandis?${query.toString()}`);

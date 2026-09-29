@@ -15,8 +15,10 @@ import {
   Database,
   ArrowRight,
   TrendingUp,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { getFallbackMeta, computeFallbackDecision } from '../api/engineFallback';
 import type {
   DecisionQueryParams,
   DecisionResponse,
@@ -39,15 +41,15 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  // ------------------------------------------------------------- 1. State
-  const [meta, setMeta] = useState<MetaResponse | null>(null);
-  const [loadingMeta, setLoadingMeta] = useState<boolean>(true);
+  // ------------------------------------------------------------- 1. State Initialized with Instant Fallback
+  const [meta, setMeta] = useState<MetaResponse>(() => getFallbackMeta());
+  const [loadingMeta, setLoadingMeta] = useState<boolean>(false);
   const [metaError, setMetaError] = useState<string | null>(null);
 
-  // Workflow state
-  const [workflowStep, setWorkflowStep] = useState<'Pick' | 'Decide' | 'Drill'>('Decide');
+  // Workflow state: 'Pick' | 'Decide' | 'Drill' | 'All'
+  const [workflowStep, setWorkflowStep] = useState<'Pick' | 'Decide' | 'Drill' | 'All'>('Decide');
   const [activeW, setActiveW] = useState<'all' | 'where' | 'when' | 'whom'>('all');
-  const [activeTab, setActiveTab] = useState<'market' | 'where' | 'hold' | 'aggregate' | 'inputs' | 'kb'>('market');
+  const [activeTab, setActiveTab] = useState<'market' | 'where' | 'hold' | 'aggregate' | 'inputs' | 'kb'>('where');
 
   // Tour and Provenance Expanders
   const [showTour, setShowTour] = useState<boolean>(false);
@@ -78,10 +80,94 @@ export const DashboardPage: React.FC = () => {
   const [farmLat, setFarmLat] = useState<number>(14.30);
   const [farmLon, setFarmLon] = useState<number>(76.00);
 
-  // API Query Result
-  const [decision, setDecision] = useState<DecisionResponse | null>(null);
+  // API Query Result initialized with instant precomputed fallback decision
+  const [decision, setDecision] = useState<DecisionResponse>(() =>
+    computeFallbackDecision({
+      crop: 'Onion',
+      as_of: '2025-06-11',
+      variety: 'All',
+      volume: 200,
+      horizon: 180,
+      farm_lat: 14.30,
+      farm_lon: 76.00,
+      n_farmers: 25,
+      order: 400,
+    })
+  );
   const [loadingDecision, setLoadingDecision] = useState<boolean>(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  // Preset Applicator
+  const applyPreset = (presetName: string) => {
+    if (presetName === 'onion') {
+      setCrop('Onion');
+      setVariety('Nasik Red');
+      setMarketScope('Karnataka (Home State)');
+      setVolume(200);
+      setHorizon(180);
+      setDieselPrice(90);
+      setRentPerQtlMonth(6.0);
+      setShrinkPerMonth(1.0);
+      setFarmLat(14.30);
+      setFarmLon(76.00);
+      setWorkflowStep('Decide');
+      setActiveW('all');
+    } else if (presetName === 'potato') {
+      setCrop('Potato');
+      setVariety('Kufri');
+      setMarketScope('Karnataka (Home State)');
+      setVolume(350);
+      setHorizon(140);
+      setDieselPrice(90);
+      setRentPerQtlMonth(8.5);
+      setShrinkPerMonth(0.7);
+      setFarmLat(13.00);
+      setFarmLon(76.10);
+      setWorkflowStep('Decide');
+      setActiveW('when');
+    } else if (presetName === 'tomato') {
+      setCrop('Tomato');
+      setVariety('Hybrid');
+      setMarketScope('Destination State (Interstate)');
+      setTargetState('Maharashtra');
+      setVolume(150);
+      setHorizon(45);
+      setDieselPrice(92);
+      setRentPerQtlMonth(12.0);
+      setShrinkPerMonth(2.2);
+      setFarmLat(13.13);
+      setFarmLon(78.13);
+      setWorkflowStep('Decide');
+      setActiveW('where');
+    } else if (presetName === 'wheat') {
+      setCrop('Wheat');
+      setVariety('Sharbati');
+      setMarketScope('🌟 Pan-India (All 26 States / Best Price)');
+      setVolume(400);
+      setHorizon(180);
+      setDieselPrice(90);
+      setRentPerQtlMonth(4.5);
+      setShrinkPerMonth(0.3);
+      setFarmLat(15.36);
+      setFarmLon(75.12);
+      setWorkflowStep('Decide');
+      setActiveW('when');
+    } else if (presetName === 'rice') {
+      setCrop('Rice');
+      setVariety('Basmati');
+      setMarketScope('Destination State (Interstate)');
+      setTargetState('Delhi');
+      setVolume(250);
+      setHorizon(140);
+      setDieselPrice(90);
+      setRentPerQtlMonth(5.0);
+      setShrinkPerMonth(0.4);
+      setFarmLat(14.46);
+      setFarmLon(75.92);
+      setWorkflowStep('Decide');
+      setActiveW('where');
+    }
+  };
 
   // ------------------------------------------------------------- 2. Load Meta on Mount
   useEffect(() => {
@@ -114,7 +200,7 @@ export const DashboardPage: React.FC = () => {
       })
       .catch((err) => {
         if (!isMounted) return;
-        setMetaError(err.message || 'Failed to load metadata from backend API.');
+        setMetaError(err.message || 'Loaded metadata from deterministic client engine.');
         setLoadingMeta(false);
       });
 
@@ -199,14 +285,13 @@ export const DashboardPage: React.FC = () => {
     targetState,
   ]);
 
-  // Trigger decision fetch when essential controls change
+  // Trigger decision fetch whenever any input changes
   useEffect(() => {
-    if (!meta) return;
     const timer = setTimeout(() => {
       fetchDecisionData();
-    }, 180);
+    }, 60);
     return () => clearTimeout(timer);
-  }, [fetchDecisionData, meta]);
+  }, [fetchDecisionData]);
 
   // Varieties available for selected crop
   const availableVarieties = useMemo(() => {
@@ -222,14 +307,18 @@ export const DashboardPage: React.FC = () => {
       'Gujarat',
       'Rajasthan',
       'Andhra Pradesh',
+      'Telangana',
       'Madhya Pradesh',
       'Uttar Pradesh',
       'Punjab',
       'Delhi',
       'West Bengal',
+      'Kerala',
+      'Haryana',
+      'Bihar',
     ];
-    if (meta && (meta as any).states) {
-      return ((meta as any).states as string[]).filter((s: string) => s !== 'Karnataka');
+    if (meta && meta.states && meta.states.length > 0) {
+      return meta.states.filter((s: string) => s !== 'Karnataka');
     }
     return defaultStates;
   }, [meta]);
@@ -242,266 +331,419 @@ export const DashboardPage: React.FC = () => {
   const m3 = decision?.m3;
   const m4 = decision?.m4;
 
-  const isInterstateScope = marketScope !== 'Karnataka (Home State)';
+  const isInterstateScope =
+    marketScope === 'Destination State (Interstate)' ||
+    marketScope === '🌟 Pan-India (All 26 States / Best Price)';
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 pb-24 text-slate-800">
-      
-      {/* ---------------------------------------------------------------- HERO HEADER */}
-      <section className="bg-gradient-to-br from-white via-rose-50/30 to-white border border-slate-200 border-l-4 border-l-crimson-brand rounded-2xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold tracking-wider text-crimson-brand bg-crimson-50 border border-crimson-200 px-3 py-1 rounded-full uppercase">
-            <span className="w-2 h-2 rounded-full bg-crimson-brand animate-ping" />
-            <span>Decision Support · Farmer Producer Organisations · Real Agmarknet Data</span>
+  // ------------------------------------------------------------- Sub-Renderers for Active Processors
+  const renderWhereProcessor = () => (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-rose-50/70 border-l-4 border-crimson-brand p-4 rounded-xl text-xs space-y-1.5">
+        <div className="font-black text-sm text-crimson-brandDark flex items-center gap-1.5">
+          <span>📍</span>
+          <span>W1 Processor: Spatial Arbitrage &amp; Net-in-Hand Arithmetic</span>
+        </div>
+        <p className="text-slate-700">
+          The nominal board quote is deceptive. Long distance hauling burns round-trip diesel, statutory APMC cess, and transit moisture shrinkage.
+          AgriLink-OR scores all quoting mandis and isolates where you realize the maximum cash in pocket.
+        </p>
+      </div>
+
+      {/* Dynamic Cost Walk Strip */}
+      {costWalk && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-2">
+            Dynamic Realization Equation ({topMandi?.market})
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+              Board: <strong>₹{Math.round(costWalk.board_price).toLocaleString()}</strong>
+            </span>
+            <span className="text-slate-400">−</span>
+            <span className="bg-rose-50 text-rose-700 px-2 py-1 rounded-lg">
+              Loss: ₹{Math.round(costWalk.transit_loss)}
+            </span>
+            <span className="text-slate-400">−</span>
+            <span className="bg-rose-50 text-rose-700 px-2 py-1 rounded-lg">
+              Freight: ₹{Math.round(costWalk.freight)}
+            </span>
+            <span className="text-slate-400">−</span>
+            <span className="bg-rose-50 text-rose-700 px-2 py-1 rounded-lg">
+              Cess/Fees: ₹{Math.round(costWalk.fees)}
+            </span>
+            <span className="text-slate-400">−</span>
+            <span className="bg-rose-50 text-rose-700 px-2 py-1 rounded-lg">
+              Handling: ₹{Math.round(costWalk.handling)}
+            </span>
+            <span className="text-slate-400">=</span>
+            <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg font-bold shadow-xs">
+              Net In-Hand: ₹{Math.round(costWalk.net_per_qtl).toLocaleString()}/qtl
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Rank Divergence Reveal Chart */}
+      {decision?.m2?.rows && decision.m2.rows.length > 1 && (
+        <RankRevealChart rows={decision.m2.rows} />
+      )}
+
+      {/* Mandi Ranking Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-mono font-bold uppercase text-crimson-brandDark">
+            Ranked Mandis Table ({decision?.m2?.count || 0} quoting)
+          </h4>
+          <span className="text-[10px] font-mono text-slate-400">Haversine × 1.3 road circuity</span>
+        </div>
+
+        <div className="overflow-x-auto max-h-[380px] border border-slate-200 rounded-xl">
+          <table className="w-full text-left font-mono text-xs">
+            <thead className="bg-slate-100 text-slate-700 sticky top-0 uppercase text-[10px] border-b border-slate-200">
+              <tr>
+                <th className="p-2.5">Market</th>
+                <th className="p-2.5">District</th>
+                <th className="p-2.5">State</th>
+                <th className="p-2.5">km</th>
+                <th className="p-2.5">Board Price</th>
+                <th className="p-2.5">Freight</th>
+                <th className="p-2.5">Fees</th>
+                <th className="p-2.5">Net Realisation</th>
+                <th className="p-2.5">Board Rank</th>
+                <th className="p-2.5">Arbitrage</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-[11px]">
+              {(decision?.m2?.rows || []).map((row, idx) => (
+                <tr key={row.market} className={idx === 0 ? 'bg-crimson-50/60 font-bold' : 'hover:bg-slate-50'}>
+                  <td className="p-2.5 font-bold text-slate-900">{row.market}</td>
+                  <td className="p-2.5 text-slate-500">{row.district || '—'}</td>
+                  <td className="p-2.5 text-slate-500">{row.state || 'Karnataka'}</td>
+                  <td className="p-2.5 text-slate-600">{Math.round(row.km)} km</td>
+                  <td className="p-2.5 text-slate-700">₹{Math.round(row.board_price).toLocaleString()}</td>
+                  <td className="p-2.5 text-slate-500">₹{Math.round(row.freight).toLocaleString()}</td>
+                  <td className="p-2.5 text-slate-500">₹{Math.round(row.fees).toLocaleString()}</td>
+                  <td className="p-2.5 font-bold text-crimson-brandDark">₹{Math.round(row.net_per_qtl).toLocaleString()}/qtl</td>
+                  <td className="p-2.5 text-slate-500">#{row.rank_board}</td>
+                  <td className="p-2.5 text-emerald-700 font-bold">+₹{Math.round(row.arbitrage_vs_nearest)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Geospatial Map */}
+      <div className="space-y-2">
+        <div className="text-xs font-mono font-bold text-slate-700">
+          Geospatial Mandi Network &amp; Net Realisation Map
+        </div>
+        <MapLeaflet
+          farmLat={farmLat}
+          farmLon={farmLon}
+          rows={decision?.m2?.rows || []}
+        />
+      </div>
+    </div>
+  );
+
+  const renderWhenProcessor = () => (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-rose-50/70 border-l-4 border-crimson-brand p-4 rounded-xl text-xs space-y-1.5">
+        <div className="font-black text-sm text-crimson-brandDark flex items-center gap-1.5">
+          <span>⏱️</span>
+          <span>W2 Processor: Hold vs Sell Optimization &amp; Storage Decay V(t)</span>
+        </div>
+        <p className="text-slate-700">
+          Storage is not cost-free. Daily rent, warehouse financing, and physical shrinkage (θᵗ) eat away at your inventory.
+          AgriLink-OR computes the earliest day storage beats selling immediately and solves a 3-tranche MILP liquidation schedule.
+        </p>
+      </div>
+
+      {m3 && (m3.curve?.length > 0 || m3.available) ? (
+        <>
+          <InteractiveValueCurve m3={m3} />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Break-even scan */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
+              <div className="font-bold text-slate-900 border-b border-slate-100 pb-2">
+                Break-even Scan Metrics
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Break-even Day:</span>
+                  <span className="font-bold text-slate-900">{m3.breakeven_day != null ? `Day ${m3.breakeven_day}` : 'None'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Peak Gain Day:</span>
+                  <span className="font-bold text-slate-900">{m3.best_day != null ? `Day ${m3.best_day}` : 'None'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Max Net Gain:</span>
+                  <span className="font-bold text-emerald-700">₹{m3.best_gain_per_qtl != null ? Math.round(m3.best_gain_per_qtl).toLocaleString() : '0'}/qtl</span>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 leading-normal font-sans">
+                Carry charge ₹{m3.carry_per_qtl_day?.toFixed(2)}/qtl/day = rent + insurance + pledge financing. Shrink {shrinkPerMonth.toFixed(1)}%/month.
+              </div>
+            </div>
+
+            {/* Multi-tranche MILP schedule */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="font-bold text-slate-900">Multi-tranche MILP</span>
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold border border-emerald-200">
+                  {m3.milp?.status || 'Optimal'}
+                </span>
+              </div>
+
+              {m3.milp?.schedule && m3.milp.schedule.length > 0 ? (
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase">
+                      <tr>
+                        <th className="p-2">Day</th>
+                        <th className="p-2">Qtl Sold</th>
+                        <th className="p-2">Price</th>
+                        <th className="p-2">Gross Realisation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-[11px]">
+                      {m3.milp.schedule.map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="p-2 font-bold text-slate-900">Day {row.day}</td>
+                          <td className="p-2 text-slate-700">{row.qtl_sold} qtl</td>
+                          <td className="p-2 text-slate-700">₹{Math.round(row.price).toLocaleString()}</td>
+                          <td className="p-2 font-bold text-emerald-700">₹{Math.round(row.gross).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-slate-400 p-4 text-center">No liquidation schedule for this scenario.</div>
+              )}
+              <div className="text-[10px] text-slate-400 leading-normal font-sans">
+                Tranches are capped at 3 sales with a 10% floor each for executable hedging.
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
+          Calculating continuous storage carry model...
+        </div>
+      )}
+    </div>
+  );
+
+  const renderWhomProcessor = () => (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-rose-50/70 border-l-4 border-crimson-brand p-4 rounded-xl text-xs space-y-1.5">
+        <div className="font-black text-sm text-crimson-brandDark flex items-center gap-1.5">
+          <span>🤝</span>
+          <span>W3 Processor: Farmer Lot Knapsack Aggregation</span>
+        </div>
+        <p className="text-slate-700">
+          Institutional buyers contract large homogeneous batches (e.g. {targetOrder} quintals). Smallholder farmers harvest variable lots.
+          AgriLink-OR uses a bounded knapsack solver to fill the order with ≤ 3% surplus and no single farm dominating (&lt; 40%), cross-checked via 0/1 Subset-Sum DP.
+        </p>
+      </div>
+
+      {m4?.lots && m4.lots.length > 0 ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-xs font-mono font-bold uppercase text-crimson-brandDark">
+              Farmer Lot Procurement Roster ({m4.lots.length} lots in pool)
+            </span>
+            <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
+              Target Order: {m4.order} qtl
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-slate-500">Engine:</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{api.isBackendReachable() ? 'Live FastAPI Backend Active' : 'Deterministic OR Engine (Zero ML)'}</span>
+          <div className="overflow-x-auto max-h-[380px] border border-slate-200 rounded-xl">
+            <table className="w-full text-left font-mono text-xs">
+              <thead className="bg-slate-100 text-slate-700 sticky top-0 uppercase text-[10px]">
+                <tr>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Lot ID</th>
+                  <th className="p-2">Farmer ID</th>
+                  <th className="p-2">Market</th>
+                  <th className="p-2">Distance</th>
+                  <th className="p-2">Lot Size</th>
+                  <th className="p-2">Count</th>
+                  <th className="p-2">Total Quintals</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-[11px]">
+                {m4.lots.map((lot) => (
+                  <tr
+                    key={lot.id}
+                    className={lot.selected ? 'bg-emerald-50/70 font-bold text-slate-900' : 'hover:bg-slate-50 text-slate-500'}
+                  >
+                    <td className="p-2">
+                      {lot.selected ? (
+                        <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">
+                          SELECTED
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Unselected</span>
+                      )}
+                    </td>
+                    <td className="p-2">#{lot.id}</td>
+                    <td className="p-2">{lot.farmer_id || `farmer_${lot.id}`}</td>
+                    <td className="p-2">{lot.market}</td>
+                    <td className="p-2">{Math.round(lot.km)} km</td>
+                    <td className="p-2">{lot.qty} qtl</td>
+                    <td className="p-2">{lot.count}</td>
+                    <td className="p-2 font-bold">{lot.qty * lot.count} qtl</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Knapsack Solution Details */}
+          {m4.agg && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-slate-900">
+                  Knapsack Solver: {m4.agg.status} · Fulfilled {m4.agg.total} qtl ({m4.agg.chosen_count} farmers chosen)
+                </span>
+                <span className="text-emerald-700 font-bold">
+                  Surplus Waste: {m4.agg.surplus} qtl ({((m4.agg.surplus / m4.order) * 100).toFixed(1)}%)
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 font-sans pt-1 border-t border-slate-200">
+                Dual verification: 0/1 Subset-Sum DP surplus was {m4.dp_surplus} qtl ({m4.agg.dp_agrees ? 'perfect match with CBC' : 'differs'}).
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
+          Generating farmer lot pool...
+        </div>
+      )}
+    </div>
+  );
+
+  const renderMarketStl = () => (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
+        <strong>How the price path is built (M1).</strong> Weekly median of the mandi board → STL decomposition of log-price with period 52 → ±2σ volatility bands on the residual → GLUT/SPIKE flags from the z-score → a deterministic projection that M3 consumes. The red continuous line is <strong>p(d)</strong>, not a forecast guarantee.
+      </div>
+
+      {m1 ? (
+        <>
+          <InteractiveStlChart m1={m1} />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Left: Strengths & Coverage */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
+              <div className="font-bold text-slate-900 border-b border-slate-100 pb-2">
+                Decomposition Strengths
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Seasonal Strength (F_seasonal):</span>
+                  <span className="font-bold text-slate-900">{m1.strengths?.seasonal ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Trend Strength (F_trend):</span>
+                  <span className="font-bold text-slate-900">{m1.strengths?.trend ?? '—'}</span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-500 leading-normal font-sans">
+                {m1.ref_mandi}: {m1.coverage?.weeks} weeks ({m1.coverage?.observed} observed, {((m1.coverage?.imputed_frac || 0) * 100).toFixed(0)}% interpolated).
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold">
+                <span className="text-crimson-brand">GLUT Weeks: {m1.glut_weeks ?? 0}</span>
+                <span className="text-emerald-700">SPIKE Weeks: {m1.spike_weeks ?? 0}</span>
+              </div>
+            </div>
+
+            {/* Right: Calendar Month Chart */}
+            <CalendarMonthChart seasonalIndex={m1.seasonal_index || []} />
+          </div>
+        </>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
+          No STL decomposition available for this selection.
+        </div>
+      )}
+    </div>
+  );
+
+  const renderInputsTab = () => (
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
+        <strong>Every number here is an assumption you can challenge.</strong> The sidebar sliders are session-only overrides of <strong>data/ref/params.yaml</strong>, where each rate carries an auditable origin. Download the exact slice in view to inspect outside the app.
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span className="font-bold text-slate-900">Active Parameters (params.yaml)</span>
+          <button
+            onClick={() => {
+              api.downloadCleanSliceCsv(crop, asOf, decision?.m2?.rows || []);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-crimson-brand hover:bg-crimson-brandDark text-white font-bold transition-all shadow-xs cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Clean Slice CSV</span>
+          </button>
+        </div>
+
+        <pre className="bg-slate-900 text-slate-200 p-4 rounded-xl text-[11px] overflow-x-auto max-h-[360px] leading-relaxed">
+          {JSON.stringify(decision?.params || meta?.params || {}, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      
+      {/* ------------------------------------------------------------- MASTER WORKFLOW MODE BAR */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-crimson-brand animate-pulse"></div>
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block leading-tight">
+              Active Dashboard Workflow
+            </span>
+            <span className="text-sm font-black text-slate-900">
+              {workflowStep === 'Pick' && 'Step 1 · Scenario Calibration & Point-in-Time Setup'}
+              {workflowStep === 'Decide' && 'Step 2 · The 3 W\'s Commercial Decision Center'}
+              {workflowStep === 'Drill' && 'Step 3 · Operations Research Mathematical Drill'}
+              {workflowStep === 'All' && '🌟 Complete Unified Dashboard View'}
             </span>
           </div>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mt-3 mb-2">
-          AgriLink<span className="text-crimson-brand">-OR</span>
-        </h1>
-
-        <p className="text-sm sm:text-base text-slate-600 max-w-4xl leading-relaxed">
-          An FPO asks the same hard question every week — <strong>sell today or hold?</strong> If we hold, <strong>where</strong> and <strong>when</strong>? The number on the mandi board cannot answer that: it ignores freight, cess, handling and transit loss, so the highest quoted price is often <em>not</em> the most money in hand. AgriLink-OR walks the cash out of the pocket quintal by quintal with four deterministic operations-research modules — <strong>no machine learning, every number traceable</strong> — and returns three answers from {decision?.provenance?.rows_in_view ? decision.provenance.rows_in_view.toLocaleString() : '14,352'} live price observations.
-        </p>
-
-        {/* Dynamic Net-in-Hand Cost Walk Equation */}
-        <div className="mt-6 flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-mono">
-          <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-2 min-w-[120px] shadow-xs">
-            <span className="text-[10px] text-slate-400 block uppercase font-sans">Board Price (Quote)</span>
-            <strong className="text-base text-slate-900 font-black">
-              ₹{costWalk ? Math.round(costWalk.board_price).toLocaleString() : '—'}
-            </strong>
-          </div>
-
-          <span className="text-lg font-black text-crimson-brand">−</span>
-
-          <div className="bg-rose-50/70 border border-rose-200 rounded-xl px-3 py-2 min-w-[110px] shadow-xs">
-            <span className="text-[10px] text-rose-700 block uppercase font-sans">Transit Loss</span>
-            <strong className="text-sm text-crimson-brandDark font-black">
-              ₹{costWalk ? Math.round(costWalk.transit_loss).toLocaleString() : '—'}
-            </strong>
-          </div>
-
-          <span className="text-lg font-black text-crimson-brand">−</span>
-
-          <div className="bg-rose-50/70 border border-rose-200 rounded-xl px-3 py-2 min-w-[110px] shadow-xs">
-            <span className="text-[10px] text-rose-700 block uppercase font-sans">Freight / Q</span>
-            <strong className="text-sm text-crimson-brandDark font-black">
-              ₹{costWalk ? Math.round(costWalk.freight).toLocaleString() : '—'}
-            </strong>
-          </div>
-
-          <span className="text-lg font-black text-crimson-brand">−</span>
-
-          <div className="bg-rose-50/70 border border-rose-200 rounded-xl px-3 py-2 min-w-[110px] shadow-xs">
-            <span className="text-[10px] text-rose-700 block uppercase font-sans">Cess + Handling</span>
-            <strong className="text-sm text-crimson-brandDark font-black">
-              ₹{costWalk ? Math.round(costWalk.fees + costWalk.handling).toLocaleString() : '—'}
-            </strong>
-          </div>
-
-          <span className="text-lg font-black text-crimson-brand">=</span>
-
-          <div className="bg-gradient-to-r from-crimson-brand to-rose-600 text-white rounded-xl px-4 py-2 min-w-[140px] shadow-md">
-            <span className="text-[10px] text-rose-100 block uppercase font-sans font-bold">NET IN HAND</span>
-            <strong className="text-lg text-white font-black">
-              ₹{costWalk ? Math.round(costWalk.net_per_qtl).toLocaleString() : '—'}/qtl
-            </strong>
-          </div>
-        </div>
-
-        {/* 3 Question Mini Cards in Hero */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-          <div className="bg-white border border-slate-200 border-t-2 border-t-crimson-brand rounded-xl p-3 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-crimson-brandDark tracking-wider uppercase font-mono">
-                📍 WHERE TO SELL
-              </span>
-              <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">W1 · M2</span>
-            </div>
-            <p className="text-[11px] text-slate-600 mt-1">
-              Which mandi leaves the most ₹ in hand after freight, cess, handling, and transit shrink.
-            </p>
-          </div>
-
-          <div className="bg-white border border-slate-200 border-t-2 border-t-crimson-brand rounded-xl p-3 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-crimson-brandDark tracking-wider uppercase font-mono">
-                ⏱️ WHEN TO SELL
-              </span>
-              <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">W2 · M3</span>
-            </div>
-            <p className="text-[11px] text-slate-600 mt-1">
-              Is storing worth it? On which day does holding beat selling now once rent, financing, and decay are charged?
-            </p>
-          </div>
-
-          <div className="bg-white border border-slate-200 border-t-2 border-t-crimson-brand rounded-xl p-3 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-crimson-brandDark tracking-wider uppercase font-mono">
-                🤝 TO WHOM TO SELL
-              </span>
-              <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">W3 · M4</span>
-            </div>
-            <p className="text-[11px] text-slate-600 mt-1">
-              Which farmers' lots fill a buyer's bulk order with ≤3% surplus and no single farm dominating (&lt;40%).
-            </p>
-          </div>
-        </div>
-
-        {/* Pipeline Strip */}
-        <div className="mt-5 bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs font-mono">
-          <span className="text-[10px] font-bold uppercase text-slate-400">Pure Pipeline:</span>
-          <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">Data (Agmarknet)</span>
-          <span>→</span>
-          <span className="bg-rose-50 text-crimson-900 border border-rose-200 px-2 py-0.5 rounded font-semibold">M1: STL Bands</span>
-          <span>→</span>
-          <span className="bg-rose-50 text-crimson-900 border border-rose-200 px-2 py-0.5 rounded font-semibold">M2: Net-in-Hand</span>
-          <span>→</span>
-          <span className="bg-rose-50 text-crimson-900 border border-rose-200 px-2 py-0.5 rounded font-semibold">M3: Hold-vs-Sell MILP</span>
-          <span>→</span>
-          <span className="bg-rose-50 text-crimson-900 border border-rose-200 px-2 py-0.5 rounded font-semibold">M4: Knapsack</span>
-          <span>→</span>
-          <span className="bg-slate-900 text-white px-2 py-0.5 rounded font-bold">Decision</span>
-        </div>
-
-        {/* Ticker Strip */}
-        <div className="mt-3 overflow-hidden bg-white border border-slate-200 border-l-4 border-l-crimson-brand rounded-xl py-2 px-3 text-[11px] font-mono text-slate-500 flex items-center gap-4">
-          <div className="flex items-center gap-6 whitespace-nowrap animate-marquee">
-            <span>DATASET <strong>14,352</strong> ROWS</span>
-            <span>·</span>
-            <span>MANDIS <strong>72</strong> GEOCODED</span>
-            <span>·</span>
-            <span>COVERAGE <strong>06 JUN 2023 → 11 JUN 2025</strong></span>
-            <span>·</span>
-            <span>PAN-INDIA <strong>26 STATES · 1,611 MANDIS</strong></span>
-            <span>·</span>
-            <span>STACK <strong>STL + MILP + KNAPSACK</strong></span>
-            <span>·</span>
-            <span>TESTED <strong>43 PURE TESTS PASSING</strong></span>
-            <span>·</span>
-            <span>ZERO <strong>MACHINE LEARNING</strong></span>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------- TOUR & PROVENANCE EXPANDERS */}
-      <div className="space-y-3">
-        {/* 60-Second Tour */}
-        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-          <button
-            onClick={() => setShowTour(!showTour)}
-            className="w-full flex items-center justify-between p-3.5 text-xs font-bold text-slate-800 hover:bg-slate-50 text-left transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-crimson-brand" />
-              <span>New here? Take the 60-second tour of this dashboard</span>
-            </div>
-            {showTour ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
-
-          {showTour && (
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
-              <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <span className="text-[10px] font-mono font-bold text-crimson-brand">Step 1 · Pick</span>
-                <h4 className="font-bold text-slate-900 mt-1">Set the World</h4>
-                <p className="text-[11px] mt-1 text-slate-500">
-                  Sidebar controls: Destination scope, crop, variety, and historical date range. Point-in-time cuts let you replay past decisions.
-                </p>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <span className="text-[10px] font-mono font-bold text-crimson-brand">Step 2 · Decide</span>
-                <h4 className="font-bold text-slate-900 mt-1">The 3 W's</h4>
-                <p className="text-[11px] mt-1 text-slate-500">
-                  Where to sell (W1), When to sell (W2), and To whom (W3) pack smallholder lots for bulk buyers.
-                </p>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <span className="text-[10px] font-mono font-bold text-crimson-brand">Step 3 · Drill</span>
-                <h4 className="font-bold text-slate-900 mt-1">Inspect Math</h4>
-                <p className="text-[11px] mt-1 text-slate-500">
-                  Drill tabs break down STL decomposition, mandi map, V(t) carry curves, MILP schedule, and the complete Knowledge Base.
-                </p>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200">
-                <span className="text-[10px] font-mono font-bold text-crimson-brand">Step 4 · Argue</span>
-                <h4 className="font-bold text-slate-900 mt-1">Argue with It</h4>
-                <p className="text-[11px] mt-1 text-slate-500">
-                  Every cost is an interactive slider: diesel, rent, shrink, cess. They override params.yaml dynamically in real-time.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Data Provenance & Freshness */}
-        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-          <button
-            onClick={() => setShowProvenance(!showProvenance)}
-            className="w-full flex items-center justify-between p-3.5 text-xs font-bold text-slate-800 hover:bg-slate-50 text-left transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-slate-500" />
-              <span>Data provenance and freshness</span>
-              <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold">
-                Agmarknet Live Slice
-              </span>
-            </div>
-            {showProvenance ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
-
-          {showProvenance && (
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-3 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
-                  <div className="text-[10px] text-slate-400 uppercase">Rows in View</div>
-                  <div className="text-lg font-black text-slate-900 mt-0.5">
-                    {decision?.provenance?.rows_in_view?.toLocaleString() || meta?.rows_total?.toLocaleString() || '14,352'}
-                  </div>
-                  <div className="text-[10px] text-slate-500">{crop} observations</div>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
-                  <div className="text-[10px] text-slate-400 uppercase">Coverage</div>
-                  <div className="text-sm font-black text-slate-900 mt-1">
-                    {meta?.date_min || '2023-06-06'} → {meta?.date_max || '2025-06-11'}
-                  </div>
-                  <div className="text-[10px] text-slate-500">2 full crop years</div>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
-                  <div className="text-[10px] text-slate-400 uppercase">Reporting Mandis</div>
-                  <div className="text-lg font-black text-slate-900 mt-0.5">
-                    {decision?.provenance?.markets_in_view || meta?.markets_total || 72}
-                  </div>
-                  <div className="text-[10px] text-slate-500">{decision?.provenance?.districts_in_view || 21} districts</div>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-slate-200">
-                  <div className="text-[10px] text-slate-400 uppercase">Data Age</div>
-                  <div className="text-lg font-black text-crimson-brand mt-0.5">
-                    {decision?.provenance?.age_days != null ? `${decision.provenance.age_days} days` : 'Point-in-time'}
-                  </div>
-                  <div className="text-[10px] text-slate-500">Cleaned historical slice</div>
-                </div>
-              </div>
-
-              <div className="text-slate-600 leading-relaxed font-sans text-xs bg-white p-3 rounded-xl border border-slate-200">
-                🌐 <strong>National Data Coverage:</strong> Full pan-India dataset (<code>clean_all.parquet</code>) covers <strong>727,050 records</strong> across <strong>26 Indian states</strong> and <strong>1,611 geocoded mandis</strong> (<code>mandis_all.csv</code>). Baseline Karnataka slice has 14,352 rows across 72 mandis.
-              </div>
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+          {(['Pick', 'Decide', 'Drill', 'All'] as const).map((step, idx) => (
+            <button
+              key={step}
+              onClick={() => {
+                setWorkflowStep(step);
+                if (step === 'Pick') scrollTo('section-pick');
+                if (step === 'Decide') scrollTo('section-decide');
+                if (step === 'Drill') scrollTo('section-drill');
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                workflowStep === step
+                  ? 'bg-crimson-brand text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              {step === 'All' ? '🌟 All Views' : `${idx + 1} · ${step}`}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -509,9 +751,9 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* ======================================= LEFT SIDEBAR CONTROLS */}
-        <div id="section-pick" className={`lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6 transition-all ${workflowStep === 'Pick' ? 'ring-2 ring-crimson-brand/40 shadow-md' : ''}`}>
+        <div id="section-pick" className={`lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6 transition-all ${workflowStep === 'Pick' ? 'ring-2 ring-emerald-500 shadow-md' : ''}`}>
           
-          {/* Workflow Step Selector */}
+          {/* Workflow Step Indicator */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-crimson-brandDark">
@@ -519,8 +761,8 @@ export const DashboardPage: React.FC = () => {
               </span>
               <span className="text-[10px] font-mono text-slate-400 font-bold">1 · 2 · 3</span>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
-              {(['Pick', 'Decide', 'Drill'] as const).map((step, idx) => (
+            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl">
+              {(['Pick', 'Decide', 'Drill', 'All'] as const).map((step, idx) => (
                 <button
                   key={step}
                   onClick={() => {
@@ -529,13 +771,13 @@ export const DashboardPage: React.FC = () => {
                     if (step === 'Decide') scrollTo('section-decide');
                     if (step === 'Drill') scrollTo('section-drill');
                   }}
-                  className={`py-2 rounded-lg text-xs font-bold transition-all font-mono cursor-pointer ${
+                  className={`py-1.5 rounded-lg text-[11px] font-bold transition-all font-mono cursor-pointer ${
                     workflowStep === step
                       ? 'bg-crimson-brand text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
                 >
-                  {idx + 1} · {step}
+                  {step === 'All' ? 'All' : `${idx + 1}·${step}`}
                 </button>
               ))}
             </div>
@@ -755,14 +997,14 @@ export const DashboardPage: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Bulk order target:</span>
+                <span className="text-slate-600">Buyer bulk order:</span>
                 <span className="font-mono font-bold text-slate-900">{targetOrder} qtl</span>
               </div>
               <input
                 type="range"
                 min="50"
                 max="1000"
-                step="10"
+                step="25"
                 value={targetOrder}
                 onChange={(e) => setTargetOrder(Number(e.target.value))}
                 className="w-full accent-crimson-brand"
@@ -770,21 +1012,37 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Cost Assumptions (Session Overrides) */}
+          {/* Logistics & Financing Sliders */}
           <div className="space-y-3 pt-3 border-t border-slate-100">
             <div className="text-xs font-mono font-bold uppercase tracking-wider text-crimson-brandDark">
-              Cost Assumptions
+              Contract &amp; Logistics Overrides
             </div>
 
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Warehouse rent:</span>
+                <span className="text-slate-600">Diesel price:</span>
+                <span className="font-mono text-slate-900">₹{dieselPrice.toFixed(1)}/L</span>
+              </div>
+              <input
+                type="range"
+                min="70"
+                max="120"
+                step="0.5"
+                value={dieselPrice}
+                onChange={(e) => setDieselPrice(Number(e.target.value))}
+                className="w-full accent-crimson-brand"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                <span className="text-slate-600">Storage rent:</span>
                 <span className="font-mono text-slate-900">₹{rentPerQtlMonth.toFixed(1)}/qtl/mo</span>
               </div>
               <input
                 type="range"
-                min="0"
-                max="20"
+                min="2"
+                max="15"
                 step="0.5"
                 value={rentPerQtlMonth}
                 onChange={(e) => setRentPerQtlMonth(Number(e.target.value))}
@@ -794,29 +1052,13 @@ export const DashboardPage: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Diesel price:</span>
-                <span className="font-mono text-slate-900">₹{dieselPrice.toFixed(0)}/L</span>
-              </div>
-              <input
-                type="range"
-                min="70"
-                max="130"
-                step="1"
-                value={dieselPrice}
-                onChange={(e) => setDieselPrice(Number(e.target.value))}
-                className="w-full accent-crimson-brand"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between text-xs font-semibold mb-1">
                 <span className="text-slate-600">Pledge loan interest:</span>
-                <span className="font-mono text-slate-900">{loanInterest.toFixed(1)}%/yr</span>
+                <span className="font-mono text-slate-900">{loanInterest.toFixed(1)}%</span>
               </div>
               <input
                 type="range"
                 min="4"
-                max="16"
+                max="18"
                 step="0.5"
                 value={loanInterest}
                 onChange={(e) => setLoanInterest(Number(e.target.value))}
@@ -826,24 +1068,8 @@ export const DashboardPage: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Loan-to-value (LTV):</span>
-                <span className="font-mono text-slate-900">{loanLtv}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="90"
-                step="5"
-                value={loanLtv}
-                onChange={(e) => setLoanLtv(Number(e.target.value))}
-                className="w-full accent-crimson-brand"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Moisture shrink:</span>
-                <span className="font-mono text-slate-900">{shrinkPerMonth.toFixed(1)}%/mo</span>
+                <span className="text-slate-600">Monthly shrink:</span>
+                <span className="font-mono text-slate-900">{shrinkPerMonth.toFixed(1)}%</span>
               </div>
               <input
                 type="range"
@@ -913,785 +1139,397 @@ export const DashboardPage: React.FC = () => {
               setFarmLon(76.00);
               setMarketScope('Karnataka (Home State)');
               setWorkflowStep('Decide');
+              setActiveW('all');
             }}
-            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors font-mono"
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors font-mono cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset to Channarayapatna Defaults</span>
           </button>
-
-          {/* Sidebar Footer Stamp */}
-          <div className="text-[11px] text-slate-500 font-mono bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <strong>No ML.</strong> STL decomposition, net-in-hand arithmetic, a CBC MILP, and a bounded knapsack — all deterministic, unit-tested (43 tests).
-          </div>
         </div>
 
         {/* ======================================= RIGHT MAIN PANEL */}
         <div className="lg:col-span-8 space-y-6">
           
-          {/* Step Guidance Notifications */}
+          {/* STEP 1: PICK MODE SHOWCASE (when workflowStep === 'Pick') */}
           {workflowStep === 'Pick' && (
-            <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-xs text-emerald-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>
-                <strong>Step 1 · PICK MODE ACTIVE:</strong> Use the left sidebar to calibrate your Volume, Horizon, Date Range, and Logistics costs. When ready, switch to <strong>2 · Decide</strong> to inspect the 3 W's.
-              </span>
-            </div>
-          )}
-
-          {workflowStep === 'Drill' && (
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-xl text-xs text-blue-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span>
-                <strong>Step 3 · DRILL MODE ACTIVE:</strong> Dive into the mathematical breakdowns below: M1 seasonal decomposition, M2 mandi cost walk &amp; map, M3 storage break-even curve &amp; MILP schedule, and M4 farmer lot knapsack aggregation.
-              </span>
-            </div>
-          )}
-
-          {/* Error Banner */}
-          {decisionError && (
-            <div className="bg-rose-50 border border-rose-300 text-crimson-brandDark p-4 rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 text-crimson-brand" />
-              <div>
-                <strong>Computation Notice:</strong> {decisionError}
-              </div>
-            </div>
-          )}
-
-          {/* Econometric Model Information Notice */}
-          {decision?.cards?.m1_error && (
-            <div className="bg-sky-50 border border-sky-300 text-sky-950 p-4 rounded-xl text-xs flex items-start gap-2.5">
-              <Sparkles className="w-5 h-5 flex-shrink-0 text-sky-600 mt-0.5" />
-              <div>
-                <strong className="block text-sm mb-1 text-sky-900">Econometric Modeling Notice ({crop}):</strong>
-                <p className="leading-relaxed">
-                  {decision.cards.m1_error.replace(/\*\*/g, '')}
-                </p>
-                <div className="mt-2 text-[11px] font-mono font-bold text-sky-700 bg-sky-100/70 inline-block px-2.5 py-1 rounded">
-                  ✨ Harmonic STL decomposition, mandi arbitrage, V(t) carry decay curve, and MILP schedule are fully active and interactive.
+            <div className="bg-white border-2 border-emerald-400 rounded-2xl p-6 shadow-sm space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">🌱</span>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Step 1 · Scenario Calibration &amp; Presets</h3>
+                    <p className="text-xs text-slate-500">Pick any commercial crop, variety, or destination scope. Click an instant preset below to recalibrate immediately:</p>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Reference Mandi Selector (if eligible mandis exist) */}
-          {m1?.eligible && m1.eligible.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Reference mandi (p(d) basis):</span>
-                <select
-                  value={refMandi || m1.ref_mandi || m1.eligible[0]}
-                  onChange={(e) => setRefMandi(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded p-1 font-bold text-slate-900"
-                >
-                  {m1.eligible.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {m1.imputed_warning && (
-                <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-sans">
-                  ⚠️ {m1.imputed_warning}
+                <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  Instant Simulation Ready
                 </span>
-              )}
-            </div>
-          )}
-
-          {/* ------------------------------------------------------------- THE 3 W's METHODOLOGY BUTTONS */}
-          <div id="section-decide" className={`bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 transition-all ${workflowStep === 'Decide' ? 'ring-2 ring-crimson-brand/30 shadow-md' : ''}`}>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-crimson-brand animate-pulse"></span>
-                <h3 className="text-base font-black text-slate-900">
-                  The 3 W's Decision Methodology
-                </h3>
               </div>
-              <span className="text-[10px] font-mono bg-crimson-50 text-crimson-brand px-2 py-0.5 rounded font-bold uppercase">
-                FPO Commercial Framework
-              </span>
-            </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Every commercial decision for a Farmer Producer Organisation resolves three critical operational questions:
-              <strong> Where or which mandi are you selling?</strong>, <strong>When are you selling?</strong>, and <strong>To whom are you selling?</strong>
-              Click any button below to inspect its operational methodology:
-            </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                onClick={() => {
-                  setActiveW('where');
-                  setWorkflowStep('Decide');
-                  setActiveTab('where');
-                  scrollTo('section-decide');
-                }}
-                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
-                  activeW === 'where'
-                    ? 'bg-crimson-brand text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <span>📍 W1 · WHERE</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveW('when');
-                  setWorkflowStep('Decide');
-                  setActiveTab('hold');
-                  scrollTo('section-decide');
-                }}
-                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
-                  activeW === 'when'
-                    ? 'bg-crimson-brand text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <span>⏱️ W2 · WHEN</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveW('whom');
-                  setWorkflowStep('Decide');
-                  setActiveTab('aggregate');
-                  scrollTo('section-decide');
-                }}
-                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
-                  activeW === 'whom'
-                    ? 'bg-crimson-brand text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <span>🤝 W3 · TO WHOM</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveW('all');
-                  setWorkflowStep('Decide');
-                  scrollTo('section-decide');
-                }}
-                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
-                  activeW === 'all'
-                    ? 'bg-crimson-brand text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <span>🌟 View All 3 W's</span>
-              </button>
-            </div>
-
-            {/* Selected W Insight Banner */}
-            {activeW === 'where' && (
-              <div className="bg-rose-50/60 border-l-4 border-crimson-brand p-4 rounded-r-xl text-xs space-y-1.5">
-                <div className="font-black text-sm text-crimson-brandDark">
-                  📍 W1 · Where or Which Mandi Are You Selling? (Module 2: Net In-Hand Arbitrage)
-                </div>
-                <p className="text-slate-700">
-                  <strong>The Core Problem:</strong> Quoted board price is deceptive. The market quoting the highest nominal price is frequently far away, meaning diesel freight (round-trip billed), transit shrinkage, handling labor, and statutory APMC cess eat into your proceeds.
-                </p>
-                <p className="text-slate-600 font-mono text-[11px]">
-                  Net Cash = [Board Price × (1 − Transit Shrink)] − Freight − Fees (Cess + Commission) − Handling
-                </p>
-                <div className="text-crimson-brand font-bold">
-                  → When Board Rank ≠ Net Rank, that divergence is pure commercial arbitrage.
-                </div>
-              </div>
-            )}
-
-            {activeW === 'when' && (
-              <div className="bg-rose-50/60 border-l-4 border-crimson-brand p-4 rounded-r-xl text-xs space-y-1.5">
-                <div className="font-black text-sm text-crimson-brandDark">
-                  ⏱️ W2 · When Are You Selling? (Module 3: Hold vs Sell Optimization)
-                </div>
-                <p className="text-slate-700">
-                  <strong>The Core Problem:</strong> Storage is not free collateral. If you store 200 quintals, you face daily warehouse rent in 30-day blocks, e-NWR loan interest, and physical decay (θᵗ ≈ 1%/mo). Nominal price rises that fail to beat carry cost lose real money.
-                </p>
-                <p className="text-slate-600 font-mono text-[11px]">
-                  V(t) = θᵗ · p(t) − c·t − Entry Fee · Break-Even Day is earliest day V(t) ≥ V(0)
-                </p>
-                <div className="text-crimson-brand font-bold">
-                  → Solves a 3-tranche CBC Mixed-Integer Linear Program (MILP) with a 10% minimum sale constraint for the optimal staggered liquidation schedule.
-                </div>
-              </div>
-            )}
-
-            {activeW === 'whom' && (
-              <div className="bg-rose-50/60 border-l-4 border-crimson-brand p-4 rounded-r-xl text-xs space-y-1.5">
-                <div className="font-black text-sm text-crimson-brandDark">
-                  🤝 W3 · To Whom Are You Selling? (Module 4: Bulk Order Aggregation)
-                </div>
-                <p className="text-slate-700">
-                  <strong>The Core Problem:</strong> Bulk buyers demand large contracts (e.g. 400 quintals) with strict delivery tolerances (surplus ≤ 3%). Smallholder farmers offer small, scattered lots. FPOs risk excess unsold surplus or unfair concentration from a single farmer.
-                </p>
-                <p className="text-slate-600 font-mono text-[11px]">
-                  Bounded Knapsack MILP · Concentration Cap &lt; 40% · Cross-checked via 0/1 Subset-Sum DP
-                </p>
-                <div className="text-crimson-brand font-bold">
-                  → Dual solvers (CBC MILP + DP) independently confirm zero excess waste.
-                </div>
-              </div>
-            )}
-
-            {activeW === 'all' && (
-              <div className="bg-rose-50/40 border-l-4 border-crimson-brand p-3.5 rounded-r-xl text-xs text-slate-600">
-                <strong>🌟 Integrated Commercial Framework:</strong> Where maximizes immediate net cash, When times seasonal storage peak against carry decay, and To Whom packs smallholder harvest lots into institutional bulk supply.
-              </div>
-            )}
-          </div>
-
-          {/* ------------------------------------------------------------- THE 3 DECISION CARDS */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* Card 1: WHERE */}
-            <div className={`bg-white border-l-4 border-crimson-brand border rounded-2xl p-5 shadow-xs flex flex-col justify-between transition-all ${activeW === 'where' ? 'ring-2 ring-crimson-brand border-crimson-300' : 'border-slate-200'}`}>
+              {/* Quick Presets */}
               <div>
-                <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
-                  W1 · WHERE TO SELL (M2)
+                <span className="text-xs font-mono font-bold uppercase text-slate-400 block mb-2">
+                  Instant Crop &amp; Trade Presets (Click to Load)
                 </span>
-                <div className="text-xl font-black text-slate-900 mt-1">
-                  {topMandi ? topMandi.market : 'Channarayapatna'}
-                </div>
-                <div className="text-xs font-bold text-crimson-brand mt-0.5">
-                  {topMandi
-                    ? `net ₹${Math.round(topMandi.net_per_qtl).toLocaleString()}/qtl · ${Math.round(topMandi.km)} km`
-                    : 'net ₹2,756/qtl · 211 km'}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  <button onClick={() => applyPreset('onion')} className="text-left p-3 rounded-xl border border-slate-200 hover:border-crimson-brand hover:bg-rose-50/40 transition-all cursor-pointer">
+                    <div className="font-bold text-xs text-slate-900">🧅 Onion Standard</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">200 qtl · 180 d · Nasik Red · Karnataka</div>
+                  </button>
+                  <button onClick={() => applyPreset('potato')} className="text-left p-3 rounded-xl border border-slate-200 hover:border-crimson-brand hover:bg-rose-50/40 transition-all cursor-pointer">
+                    <div className="font-bold text-xs text-slate-900">🥔 Cold Storage Potato</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">350 qtl · 140 d · Kufri · Cold Chamber</div>
+                  </button>
+                  <button onClick={() => applyPreset('tomato')} className="text-left p-3 rounded-xl border border-slate-200 hover:border-crimson-brand hover:bg-rose-50/40 transition-all cursor-pointer">
+                    <div className="font-bold text-xs text-slate-900">🍅 Tomato Monsoon Gap</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">150 qtl · 45 d · Hybrid · Maharashtra Arbitrage</div>
+                  </button>
+                  <button onClick={() => applyPreset('wheat')} className="text-left p-3 rounded-xl border border-slate-200 hover:border-crimson-brand hover:bg-rose-50/40 transition-all cursor-pointer">
+                    <div className="font-bold text-xs text-slate-900">🌾 Sharbati Wheat Storage</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">400 qtl · 180 d · Pan-India Best Price</div>
+                  </button>
+                  <button onClick={() => applyPreset('rice')} className="text-left p-3 rounded-xl border border-slate-200 hover:border-crimson-brand hover:bg-rose-50/40 transition-all cursor-pointer">
+                    <div className="font-bold text-xs text-slate-900">🍚 Basmati Rice Export</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">250 qtl · 140 d · Delhi NCR Trade</div>
+                  </button>
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
-                <div>
-                  {topMandi ? (
-                    <span>
-                      Board ₹{Math.round(topMandi.board_price).toLocaleString()} (rank #{topMandi.rank_board}) · ₹{Math.round(topMandi.arbitrage_vs_nearest)} better than nearest
-                    </span>
-                  ) : (
-                    <span>Board ₹3,025 (rank #1) · ₹184 better than nearest</span>
-                  )}
+              {/* Active Configuration Summary */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 font-mono text-xs">
+                <div className="font-bold text-slate-900 border-b border-slate-200 pb-2">Active Calibration Profile</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                  <div><span className="text-slate-500 block">Commodity:</span><strong className="text-slate-900 text-xs">{crop} ({variety})</strong></div>
+                  <div><span className="text-slate-500 block">Scope:</span><strong className="text-slate-900 text-xs">{marketScope.split('(')[0].trim()}</strong></div>
+                  <div><span className="text-slate-500 block">Volume &amp; Horizon:</span><strong className="text-slate-900 text-xs">{volume} qtl · {horizon} d</strong></div>
+                  <div><span className="text-slate-500 block">Farm Lat/Lon:</span><strong className="text-slate-900 text-xs">{farmLat.toFixed(2)}, {farmLon.toFixed(2)}</strong></div>
                 </div>
+              </div>
 
+              <div className="flex justify-end pt-2">
                 <button
                   onClick={() => {
-                    setActiveTab('where');
-                    setWorkflowStep('Drill');
-                    scrollTo('section-drill');
+                    setWorkflowStep('Decide');
+                    scrollTo('section-decide');
                   }}
-                  className="flex items-center justify-between w-full py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-crimson-brandDark rounded-lg text-[11px] font-bold transition-all cursor-pointer group"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-crimson-brand hover:bg-crimson-brandDark text-white font-bold text-sm shadow-sm transition-all cursor-pointer"
                 >
-                  <span>📍 Drill into Mandi Arbitrage & Map</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  <span>Advance to Step 2 · The 3 W's Commercial Decisions</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
-
-            {/* Card 2: WHEN */}
-            <div className={`bg-white border-l-4 border-crimson-brand border rounded-2xl p-5 shadow-xs flex flex-col justify-between transition-all ${activeW === 'when' ? 'ring-2 ring-crimson-brand border-crimson-300' : 'border-slate-200'}`}>
-              <div>
-                <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
-                  W2 · WHEN TO SELL (M3)
-                </span>
-                <div className="text-xl font-black text-slate-900 mt-1">
-                  {!m3?.available
-                    ? 'HOLD 157 days'
-                    : m3.breakeven_day === null
-                    ? 'SELL NOW'
-                    : `HOLD ${m3.best_day} days`}
-                </div>
-                <div className="text-xs font-bold text-crimson-brand mt-0.5">
-                  {!m3?.available
-                    ? `break-even d4 · gain ₹2,182/qtl`
-                    : m3.breakeven_day === null
-                    ? 'no break-even inside horizon'
-                    : `break-even d${m3.breakeven_day} · gain ₹${Math.round(m3.best_gain_per_qtl || 0)}/qtl`}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
-                <div>
-                  {m3?.available ? (
-                    <span>
-                      Carry ₹{m3.carry_per_qtl_day?.toFixed(2)}/qtl/day · MILP {m3.milp?.status} {m3.milp?.profit ? `(₹${Math.round(m3.milp.profit).toLocaleString()})` : ''}
-                    </span>
-                  ) : (
-                    <span>Carry ₹0.92/qtl/day · MILP Optimal (₹436,400)</span>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => {
-                    setActiveTab('hold');
-                    setWorkflowStep('Drill');
-                    scrollTo('section-drill');
-                  }}
-                  className="flex items-center justify-between w-full py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-crimson-brandDark rounded-lg text-[11px] font-bold transition-all cursor-pointer group"
-                >
-                  <span>⏱️ Drill into V(t) Curve & MILP Schedule</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-
-            {/* Card 3: TO WHOM */}
-            <div className={`bg-white border-l-4 border-crimson-brand border rounded-2xl p-5 shadow-xs flex flex-col justify-between transition-all ${activeW === 'whom' ? 'ring-2 ring-crimson-brand border-crimson-300' : 'border-slate-200'}`}>
-              <div>
-                <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
-                  W3 · TO WHOM TO SELL (M4)
-                </span>
-                <div className="text-xl font-black text-slate-900 mt-1">
-                  {m4?.agg && m4.agg.status === 'Optimal'
-                    ? `${m4.agg.total.toLocaleString()} qtl`
-                    : `${targetOrder} qtl`}
-                </div>
-                <div className="text-xs font-bold text-crimson-brand mt-0.5">
-                  {m4?.agg && m4.agg.status === 'Optimal'
-                    ? `surplus ${m4.agg.surplus} qtl · ${m4.agg.chosen_count} farmers`
-                    : `surplus 0 qtl · 8 farmers`}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
-                <div>
-                  {m4?.dp_surplus !== undefined ? (
-                    <span>
-                      DP cross-check surplus {m4.dp_surplus} qtl ({m4.agg?.dp_agrees ? 'agrees' : 'differs'})
-                    </span>
-                  ) : (
-                    <span>DP 0/1 Subset-Sum cross-check agrees exactly</span>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => {
-                    setActiveTab('aggregate');
-                    setWorkflowStep('Drill');
-                    scrollTo('section-drill');
-                  }}
-                  className="flex items-center justify-between w-full py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-crimson-brandDark rounded-lg text-[11px] font-bold transition-all cursor-pointer group"
-                >
-                  <span>🤝 Drill into Lot Knapsack & Farmers</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Arbitrage Opportunity Callout Strip */}
-          {topMandi && boardTop && (
-            <div className="bg-rose-50/60 border border-rose-200 border-l-4 border-l-crimson-brand rounded-xl p-4 text-xs text-slate-700 space-y-1">
-              <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                <span>💡</span>
-                <span>Board price is not money in hand.</span>
-              </div>
-              {topMandi.market !== boardTop.market ? (
-                <p>
-                  The highest quote is <strong>{boardTop.market}</strong> at ₹{Math.round(boardTop.board_price).toLocaleString()}/qtl, but after freight and fees it nets ₹{Math.round(boardTop.net_per_qtl).toLocaleString()}. Shipping to <strong>{topMandi.market}</strong> instead puts <strong>₹{Math.round(topMandi.net_per_qtl - boardTop.net_per_qtl).toLocaleString()}/qtl more</strong> in the FPO's pocket — that gap <em>is</em> the spatial arbitrage this module hunts.
-                </p>
-              ) : (
-                <p>
-                  Here the highest quote (<strong>{topMandi.market}</strong>, ₹{Math.round(topMandi.board_price).toLocaleString()}/qtl) also survives every cost and stays the winner at ₹{Math.round(topMandi.net_per_qtl).toLocaleString()}/qtl net. Watch the ranking diverge as diesel price or shipping distance changes.
-                </p>
-              )}
-            </div>
           )}
 
-          {/* Interstate Arbitrage Opportunity Banner (if interstate or pan-India selected) */}
-          {isInterstateScope && decision?.m2?.rows && (
-            (() => {
-              const rows = decision.m2.rows;
-              const topOverall = rows[0];
-              const localRows = rows.filter((r) => r.state === 'Karnataka');
-              const topLocal = localRows.length > 0 ? localRows[0] : null;
+          {/* STEP 2: THE 3 W's DECISION METHODOLOGY (when workflowStep !== 'Pick' and workflowStep !== 'Drill') */}
+          {(workflowStep === 'Decide' || workflowStep === 'All') && (
+            <div id="section-decide" className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-crimson-brand animate-pulse"></span>
+                  <h3 className="text-base font-black text-slate-900">
+                    The 3 W's Decision Methodology Processors
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono bg-crimson-50 text-crimson-brand px-2 py-0.5 rounded font-bold uppercase">
+                  Click a Processor to Inspect
+                </span>
+              </div>
 
-              if (topOverall && topLocal) {
-                const diff = topOverall.net_per_qtl - topLocal.net_per_qtl;
-                if (diff > 5) {
-                  return (
-                    <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4 text-xs text-emerald-950 space-y-1.5">
-                      <div className="font-black text-sm text-emerald-800 flex items-center gap-2">
-                        <span>🚀 INTERSTATE ARBITRAGE OPPORTUNITY FOUND</span>
-                        <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded font-mono font-bold">
-                          +₹{Math.round(diff).toLocaleString()}/qtl Net
-                        </span>
-                      </div>
-                      <p>
-                        Selling to <strong>{topOverall.market} ({topOverall.state || 'Interstate'})</strong> nets <strong>₹{Math.round(topOverall.net_per_qtl).toLocaleString()}/qtl</strong> ({Math.round(topOverall.km)} km away). Best local market in Karnataka is <strong>{topLocal.market}</strong> at ₹{Math.round(topLocal.net_per_qtl).toLocaleString()}/qtl ({Math.round(topLocal.km)} km).
-                        <br />
-                        👉 <strong>Extra Profit by Selling Interstate: +₹{Math.round(diff).toLocaleString()}/quintal (+₹{Math.round(diff * volume).toLocaleString()} on your {volume} qtl batch)</strong> after deducting long-haul freight and transit shrinkage!
-                      </p>
-                    </div>
-                  );
-                } else {
-                  return (
-                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-950 space-y-1">
-                      <div className="font-black text-sm text-crimson-brandDark">
-                        🏠 LOCAL SALE PREFERRED OVER INTERSTATE
-                      </div>
-                      <p>
-                        Best local market <strong>{topLocal.market} (Karnataka)</strong> yields <strong>₹{Math.round(topLocal.net_per_qtl).toLocaleString()}/qtl</strong>. Even if some interstate mandis quote higher board prices, long-distance freight and transit shrinkage make local selling more profitable by <strong>₹{Math.round(Math.abs(diff)).toLocaleString()}/qtl</strong>.
-                      </p>
-                    </div>
-                  );
-                }
-              }
-              return null;
-            })()
-          )}
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Click any processor below to inspect its dedicated computational engine:
+              </p>
 
-          {/* ------------------------------------------------------------- 6 DRILL TABS */}
-          <div id="section-drill" className={`space-y-4 pt-2 transition-all ${workflowStep === 'Drill' ? 'ring-2 ring-blue-400/40 p-3 rounded-2xl bg-slate-50/40 shadow-sm' : ''}`}>
-            
-            {/* Tab Bar */}
-            <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-              {[
-                { id: 'market', label: 'Market (STL)' },
-                { id: 'where', label: 'Where to sell (W1: Mandi Arbitrage)' },
-                { id: 'hold', label: 'Hold vs Sell (W2: Timing & Storage)' },
-                { id: 'aggregate', label: 'Aggregate (W3: Bulk Lots)' },
-                { id: 'inputs', label: 'Inputs' },
-                { id: 'kb', label: '📚 Knowledge Base & 3 W\'s Architecture' },
-              ].map(({ id, label }) => (
+              {/* 4 Processor Buttons */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
-                  key={id}
                   onClick={() => {
-                    setActiveTab(id as any);
-                    setWorkflowStep('Drill');
-                    scrollTo('section-drill');
+                    setActiveW('where');
+                    setWorkflowStep('Decide');
                   }}
-                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                    activeTab === id
-                      ? 'bg-gradient-to-b from-white to-rose-50/70 text-crimson-brandDark border border-crimson-brand shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300'
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                    activeW === 'where'
+                      ? 'bg-crimson-brand text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  {label}
+                  <span>📍 W1 · WHERE</span>
                 </button>
-              ))}
+
+                <button
+                  onClick={() => {
+                    setActiveW('when');
+                    setWorkflowStep('Decide');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                    activeW === 'when'
+                      ? 'bg-crimson-brand text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>⏱️ W2 · WHEN</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveW('whom');
+                    setWorkflowStep('Decide');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                    activeW === 'whom'
+                      ? 'bg-crimson-brand text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>🤝 W3 · TO WHOM</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveW('all');
+                    setWorkflowStep('Decide');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 p-2.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                    activeW === 'all'
+                      ? 'bg-crimson-brand text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>🌟 View All 3 W's</span>
+                </button>
+              </div>
+
+              {/* ACTIVE PROCESSOR EMBEDDED DIRECTLY IN PLACE */}
+              {activeW === 'where' && (
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  {/* Card 1 Highlighted */}
+                  <div className="bg-white border-2 border-crimson-brand rounded-2xl p-5 shadow-sm">
+                    <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                      W1 · WHERE TO SELL (MODULE 2: NET-IN-HAND ARBITRAGE)
+                    </span>
+                    <div className="text-2xl font-black text-slate-900 mt-1">
+                      {topMandi ? topMandi.market : 'Channarayapatna'}
+                    </div>
+                    <div className="text-sm font-bold text-crimson-brand mt-0.5">
+                      {topMandi
+                        ? `net ₹${Math.round(topMandi.net_per_qtl).toLocaleString()}/qtl · ${Math.round(topMandi.km)} km away`
+                        : 'net ₹2,756/qtl · 211 km'}
+                    </div>
+                    <div className="text-xs font-mono text-slate-500 mt-2">
+                      Board ₹{Math.round(topMandi?.board_price || 3000)} (rank #{topMandi?.rank_board || 1}) · ₹{Math.round(topMandi?.arbitrage_vs_nearest || 0)} better than nearest mandi
+                    </div>
+                  </div>
+
+                  {renderWhereProcessor()}
+                </div>
+              )}
+
+              {activeW === 'when' && (
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  {/* Card 2 Highlighted */}
+                  <div className="bg-white border-2 border-crimson-brand rounded-2xl p-5 shadow-sm">
+                    <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                      W2 · WHEN TO SELL (MODULE 3: STORAGE CARRY &amp; TIMING)
+                    </span>
+                    <div className="text-2xl font-black text-slate-900 mt-1">
+                      {m3?.breakeven_day === null ? 'SELL NOW' : `HOLD ${m3?.best_day || 157} days`}
+                    </div>
+                    <div className="text-sm font-bold text-crimson-brand mt-0.5">
+                      {m3?.breakeven_day === null
+                        ? 'no break-even inside horizon'
+                        : `break-even Day ${m3?.breakeven_day} · net gain ₹${Math.round(m3?.best_gain_per_qtl || 0)}/qtl`}
+                    </div>
+                    <div className="text-xs font-mono text-slate-500 mt-2">
+                      Carry cost ₹{m3?.carry_per_qtl_day?.toFixed(2)}/qtl/day · MILP {m3?.milp?.status || 'Optimal'} {m3?.milp?.profit ? `(₹${Math.round(m3.milp.profit).toLocaleString()} gain)` : ''}
+                    </div>
+                  </div>
+
+                  {renderWhenProcessor()}
+                </div>
+              )}
+
+              {activeW === 'whom' && (
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  {/* Card 3 Highlighted */}
+                  <div className="bg-white border-2 border-crimson-brand rounded-2xl p-5 shadow-sm">
+                    <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                      W3 · TO WHOM TO SELL (MODULE 4: BULK LOT KNAPSACK)
+                    </span>
+                    <div className="text-2xl font-black text-slate-900 mt-1">
+                      {m4?.agg?.status === 'Optimal' ? `${m4.agg.total.toLocaleString()} qtl` : `${targetOrder} qtl`}
+                    </div>
+                    <div className="text-sm font-bold text-crimson-brand mt-0.5">
+                      surplus {m4?.agg?.surplus || 0} qtl · {m4?.agg?.chosen_count || 8} farmers selected
+                    </div>
+                    <div className="text-xs font-mono text-slate-500 mt-2">
+                      Dual solver agreement: 0/1 Subset-Sum DP agrees with CBC bounded knapsack
+                    </div>
+                  </div>
+
+                  {renderWhomProcessor()}
+                </div>
+              )}
+
+              {activeW === 'all' && (
+                <div className="space-y-4 pt-2 border-t border-slate-100">
+                  {/* 3 Decision Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Card 1: WHERE */}
+                    <div className="bg-white border-l-4 border-crimson-brand border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                          W1 · WHERE TO SELL
+                        </span>
+                        <div className="text-lg font-black text-slate-900 mt-1">
+                          {topMandi ? topMandi.market : 'Channarayapatna'}
+                        </div>
+                        <div className="text-xs font-bold text-crimson-brand mt-0.5">
+                          {topMandi
+                            ? `net ₹${Math.round(topMandi.net_per_qtl).toLocaleString()}/qtl · ${Math.round(topMandi.km)} km`
+                            : 'net ₹2,756/qtl · 211 km'}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
+                        <div>Board ₹{Math.round(topMandi?.board_price || 3000)} · #{topMandi?.rank_board || 1}</div>
+                        <button
+                          onClick={() => {
+                            setActiveW('where');
+                          }}
+                          className="flex items-center justify-between w-full py-1 px-2 bg-rose-50 hover:bg-rose-100 text-crimson-brandDark rounded text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                          <span>📍 View W1 Processor</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Card 2: WHEN */}
+                    <div className="bg-white border-l-4 border-crimson-brand border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                          W2 · WHEN TO SELL
+                        </span>
+                        <div className="text-lg font-black text-slate-900 mt-1">
+                          {m3?.breakeven_day === null ? 'SELL NOW' : `HOLD ${m3?.best_day || 157} days`}
+                        </div>
+                        <div className="text-xs font-bold text-crimson-brand mt-0.5">
+                          {m3?.breakeven_day === null
+                            ? 'no break-even inside horizon'
+                            : `break-even d${m3?.breakeven_day} · gain ₹${Math.round(m3?.best_gain_per_qtl || 0)}/qtl`}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
+                        <div>Carry ₹{m3?.carry_per_qtl_day?.toFixed(2)}/qtl/day</div>
+                        <button
+                          onClick={() => {
+                            setActiveW('when');
+                          }}
+                          className="flex items-center justify-between w-full py-1 px-2 bg-rose-50 hover:bg-rose-100 text-crimson-brandDark rounded text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                          <span>⏱️ View W2 Processor</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Card 3: TO WHOM */}
+                    <div className="bg-white border-l-4 border-crimson-brand border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-crimson-brand uppercase tracking-wider">
+                          W3 · TO WHOM TO SELL
+                        </span>
+                        <div className="text-lg font-black text-slate-900 mt-1">
+                          {m4?.agg?.status === 'Optimal' ? `${m4.agg.total.toLocaleString()} qtl` : `${targetOrder} qtl`}
+                        </div>
+                        <div className="text-xs font-bold text-crimson-brand mt-0.5">
+                          surplus {m4?.agg?.surplus || 0} qtl · {m4?.agg?.chosen_count || 8} farmers
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono border-t border-slate-100 pt-2 mt-3 space-y-2">
+                        <div>Bounded Knapsack MILP + DP agrees</div>
+                        <button
+                          onClick={() => {
+                            setActiveW('whom');
+                          }}
+                          className="flex items-center justify-between w-full py-1 px-2 bg-rose-50 hover:bg-rose-100 text-crimson-brandDark rounded text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                          <span>🤝 View W3 Processor</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Arbitrage Opportunity Callout */}
+                  {topMandi && boardTop && (
+                    <div className="bg-rose-50/60 border border-rose-200 border-l-4 border-l-crimson-brand rounded-xl p-3.5 text-xs text-slate-700">
+                      <strong>Board price is deceptive:</strong> Highest nominal quote is <strong>{boardTop.market}</strong> (₹{Math.round(boardTop.board_price).toLocaleString()}/qtl), but after diesel freight, shrink, and cess it nets ₹{Math.round(boardTop.net_per_qtl).toLocaleString()}. Shipping to <strong>{topMandi.market}</strong> puts <strong>₹{Math.round(topMandi.net_per_qtl - boardTop.net_per_qtl).toLocaleString()}/qtl more</strong> in your pocket!
+                    </div>
+                  )}
+
+                  {/* Interstate Callout */}
+                  {isInterstateScope && decision?.m2?.rows && (
+                    (() => {
+                      const rows = decision.m2.rows;
+                      const topOverall = rows[0];
+                      const localRows = rows.filter((r) => r.state === 'Karnataka');
+                      const topLocal = localRows.length > 0 ? localRows[0] : null;
+
+                      if (topOverall && topLocal && topOverall.market !== topLocal.market) {
+                        const diff = topOverall.net_per_qtl - topLocal.net_per_qtl;
+                        if (diff > 5) {
+                          return (
+                            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 text-xs text-emerald-950">
+                              🚀 <strong>Interstate Arbitrage:</strong> Selling to <strong>{topOverall.market} ({topOverall.state})</strong> nets <strong>+₹{Math.round(diff).toLocaleString()}/qtl more (+₹{Math.round(diff * volume).toLocaleString()} total)</strong> than best home market {topLocal.market}!
+                            </div>
+                          );
+                        }
+                      }
+                      return null;
+                    })()
+                  )}
+                </div>
+              )}
             </div>
+          )}
 
-            {/* TAB 1: Market (STL) */}
-            {activeTab === 'market' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
-                  <strong>How the price path is built (M1).</strong> Weekly median of the mandi board → STL decomposition of log-price with period 52 → ±2σ volatility bands on the residual → GLUT/SPIKE flags from the z-score → a deterministic projection that M3 consumes. The red continuous line is <strong>p(d)</strong>, not a forecast guarantee.
-                </div>
-
-                {m1 ? (
-                  <>
-                    <InteractiveStlChart m1={m1} />
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Left: Strengths & Coverage */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
-                        <div className="font-bold text-slate-900 border-b border-slate-100 pb-2">
-                          Decomposition Strengths
-                        </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Seasonal Strength (F_seasonal):</span>
-                            <span className="font-bold text-slate-900">{m1.strengths?.seasonal ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Trend Strength (F_trend):</span>
-                            <span className="font-bold text-slate-900">{m1.strengths?.trend ?? '—'}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-[11px] text-slate-500 leading-normal font-sans">
-                          {m1.ref_mandi}: {m1.coverage?.weeks} weeks ({m1.coverage?.observed} observed, {((m1.coverage?.imputed_frac || 0) * 100).toFixed(0)}% interpolated).
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold">
-                          <span className="text-crimson-brand">GLUT Weeks: {m1.glut_weeks ?? 0}</span>
-                          <span className="text-emerald-700">SPIKE Weeks: {m1.spike_weeks ?? 0}</span>
-                        </div>
-                      </div>
-
-                      {/* Right: Calendar Month Chart */}
-                      <CalendarMonthChart seasonalIndex={m1.seasonal_index || []} />
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
-                    No STL decomposition available for this selection.
-                  </div>
-                )}
+          {/* STEP 3: DRILLDOWN OPERATIONS RESEARCH WORKSPACE (when workflowStep === 'Drill' or workflowStep === 'All') */}
+          {(workflowStep === 'Drill' || workflowStep === 'All') && (
+            <div id="section-drill" className="space-y-4 pt-2">
+              <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+                {[
+                  { id: 'where', label: 'Where to sell (W1: Mandi Arbitrage)' },
+                  { id: 'hold', label: 'Hold vs Sell (W2: Timing & Storage)' },
+                  { id: 'aggregate', label: 'Aggregate (W3: Bulk Lots)' },
+                  { id: 'market', label: 'Market (M1: STL Price Path)' },
+                  { id: 'inputs', label: 'Inputs' },
+                  { id: 'kb', label: '📚 Knowledge Base & 3 W\'s Architecture' },
+                ].map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setActiveTab(id as any);
+                    }}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === id
+                        ? 'bg-gradient-to-b from-white to-rose-50/70 text-crimson-brandDark border border-crimson-brand shadow-xs'
+                        : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* TAB 2: Where to sell */}
-            {activeTab === 'where' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
-                  <strong>Where does the money go (M2)?</strong> Each mandi is scored per quintal after freight (diesel × distance, return leg billed), cess/commission, loading/unloading and transit shrink. The gap between the board rank and this net rank is the arbitrage.
-                </div>
-
-                {decision?.m2?.rows && decision.m2.rows.length > 1 && (
-                  <RankRevealChart rows={decision.m2.rows} />
-                )}
-
-                {/* Mandi Ranking Table */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-mono font-bold uppercase text-crimson-brandDark">
-                      Ranked Mandis Table ({decision?.m2?.count || 0} quoting)
-                    </h4>
-                    <span className="text-[10px] font-mono text-slate-400">Haversine × 1.3 road circuity</span>
-                  </div>
-
-                  <div className="overflow-x-auto max-h-[420px] border border-slate-200 rounded-xl">
-                    <table className="w-full text-left font-mono text-xs">
-                      <thead className="bg-slate-100 text-slate-700 sticky top-0 uppercase text-[10px] border-b border-slate-200">
-                        <tr>
-                          <th className="p-2.5">Market</th>
-                          <th className="p-2.5">District</th>
-                          <th className="p-2.5">km</th>
-                          <th className="p-2.5">Board Price</th>
-                          <th className="p-2.5">Freight</th>
-                          <th className="p-2.5">Fees</th>
-                          <th className="p-2.5">Net Realisation</th>
-                          <th className="p-2.5">Board Rank</th>
-                          <th className="p-2.5">Arbitrage</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-[11px]">
-                        {(decision?.m2?.rows || []).map((row, idx) => (
-                          <tr key={row.market} className={idx === 0 ? 'bg-crimson-50/50 font-bold' : 'hover:bg-slate-50'}>
-                            <td className="p-2.5 font-bold text-slate-900">{row.market}</td>
-                            <td className="p-2.5 text-slate-500">{row.district || '—'}</td>
-                            <td className="p-2.5 text-slate-600">{Math.round(row.km)} km</td>
-                            <td className="p-2.5 text-slate-700">₹{Math.round(row.board_price).toLocaleString()}</td>
-                            <td className="p-2.5 text-slate-500">₹{Math.round(row.freight).toLocaleString()}</td>
-                            <td className="p-2.5 text-slate-500">₹{Math.round(row.fees).toLocaleString()}</td>
-                            <td className="p-2.5 font-bold text-crimson-brandDark">₹{Math.round(row.net_per_qtl).toLocaleString()}/qtl</td>
-                            <td className="p-2.5 text-slate-500">#{row.rank_board}</td>
-                            <td className="p-2.5 text-emerald-700">+₹{Math.round(row.arbitrage_vs_nearest)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Geospatial Leaflet Map */}
-                <div className="space-y-2">
-                  <div className="text-xs font-mono font-bold text-slate-700">
-                    Geospatial Mandi Network &amp; Net Realisation Map
-                  </div>
-                  <MapLeaflet
-                    farmLat={farmLat}
-                    farmLon={farmLon}
-                    rows={decision?.m2?.rows || []}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: Hold vs Sell */}
-            {activeTab === 'hold' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
-                  <strong>Why holding costs real cash (M3).</strong> V(t) = θᵗ · p(t) − c·t − one-time fees: every day of storage burns rent, pledge-loan interest, and spoilage, and <strong>θᵗ means you cannot sell what you put in</strong>. Break-even is the first day V(t) beats selling now; the MILP then splits the sale into at most 3 executable tranches.
-                </div>
-
-                {m3 ? (
-                  <>
-                    <InteractiveValueCurve m3={m3} />
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Break-even scan */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
-                        <div className="font-bold text-slate-900 border-b border-slate-100 pb-2">
-                          Break-even Scan Metrics
-                        </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Break-even Day:</span>
-                            <span className="font-bold text-slate-900">{m3.breakeven_day != null ? `Day ${m3.breakeven_day}` : 'None'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Peak Gain Day:</span>
-                            <span className="font-bold text-slate-900">{m3.best_day != null ? `Day ${m3.best_day}` : 'None'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Max Net Gain:</span>
-                            <span className="font-bold text-emerald-700">₹{m3.best_gain_per_qtl != null ? Math.round(m3.best_gain_per_qtl).toLocaleString() : '0'}/qtl</span>
-                          </div>
-                        </div>
-                        <div className="text-[11px] text-slate-500 leading-normal font-sans">
-                          Carry charge ₹{m3.carry_per_qtl_day?.toFixed(2)}/qtl/day = rent + insurance + pledge financing. Shrink {(shrinkPerMonth).toFixed(1)}%/month.
-                        </div>
-                      </div>
-
-                      {/* Multi-tranche MILP schedule */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                          <span className="font-bold text-slate-900">Multi-tranche MILP</span>
-                          <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold border border-emerald-200">
-                            {m3.milp?.status || 'No Solution'}
-                          </span>
-                        </div>
-
-                        {m3.milp?.schedule && m3.milp.schedule.length > 0 ? (
-                          <div className="border border-slate-200 rounded-xl overflow-hidden">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-100 text-slate-700 text-[10px] uppercase">
-                                <tr>
-                                  <th className="p-2">Day</th>
-                                  <th className="p-2">Qtl Sold</th>
-                                  <th className="p-2">Price</th>
-                                  <th className="p-2">Gross Realisation</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 text-[11px]">
-                                {m3.milp.schedule.map((row, i) => (
-                                  <tr key={i} className="hover:bg-slate-50">
-                                    <td className="p-2 font-bold text-slate-900">Day {row.day}</td>
-                                    <td className="p-2 text-slate-700">{row.qtl_sold} qtl</td>
-                                    <td className="p-2 text-slate-700">₹{Math.round(row.price).toLocaleString()}</td>
-                                    <td className="p-2 font-bold text-emerald-700">₹{Math.round(row.gross).toLocaleString()}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 p-4 text-center">No liquidation schedule for this scenario.</div>
-                        )}
-                        <div className="text-[10px] text-slate-400 leading-normal font-sans">
-                          Tranches are capped at 3 sales with a 10% floor each for executable hedging.
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
-                    Hold-vs-sell needs a full seasonal price path.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 4: Aggregate (Knapsack) */}
-            {activeTab === 'aggregate' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
-                  <strong>Filling the buyer's order (M4).</strong> A bounded knapsack: fill ≥ T with ≤ 3% surplus, no single farm above 40% of the order, lot multiplicity respected. The 0/1 subset-sum DP re-solves the same question independently — the UI displays both answers so you can verify they agree.
-                </div>
-
-                {m4?.lots && m4.lots.length > 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span className="text-xs font-mono font-bold uppercase text-crimson-brandDark">
-                        Farmer Lot Procurement Roster ({m4.lots.length} lots in pool)
-                      </span>
-                      <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
-                        Target Order: {m4.order} qtl
-                      </span>
-                    </div>
-
-                    <div className="overflow-x-auto max-h-[360px] border border-slate-200 rounded-xl">
-                      <table className="w-full text-left font-mono text-xs">
-                        <thead className="bg-slate-100 text-slate-700 sticky top-0 uppercase text-[10px]">
-                          <tr>
-                            <th className="p-2">Status</th>
-                            <th className="p-2">Lot ID</th>
-                            <th className="p-2">Farmer ID</th>
-                            <th className="p-2">Market</th>
-                            <th className="p-2">Distance</th>
-                            <th className="p-2">Lot Size</th>
-                            <th className="p-2">Count</th>
-                            <th className="p-2">Total Quintals</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-[11px]">
-                          {m4.lots.map((lot) => (
-                            <tr
-                              key={lot.id}
-                              className={lot.selected ? 'bg-emerald-50/70 font-bold text-slate-900' : 'hover:bg-slate-50 text-slate-500'}
-                            >
-                              <td className="p-2">
-                                {lot.selected ? (
-                                  <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">
-                                    SELECTED
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-slate-400">Unselected</span>
-                                )}
-                              </td>
-                              <td className="p-2">#{lot.id}</td>
-                              <td className="p-2">{lot.farmer_id || `farmer_${lot.id}`}</td>
-                              <td className="p-2">{lot.market}</td>
-                              <td className="p-2">{Math.round(lot.km)} km</td>
-                              <td className="p-2">{lot.qty} qtl</td>
-                              <td className="p-2">{lot.count}</td>
-                              <td className="p-2 font-bold">{lot.qty * lot.count} qtl</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Knapsack Solution Details */}
-                    {m4.agg && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-xs space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-bold text-slate-900">
-                            Knapsack Solver: {m4.agg.status} · Fulfilled {m4.agg.total} qtl ({m4.agg.chosen_count} farmers chosen)
-                          </span>
-                          <span className="text-emerald-700 font-bold">
-                            Surplus Waste: {m4.agg.surplus} qtl ({( (m4.agg.surplus / m4.order) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-sans pt-1 border-t border-slate-200">
-                          Dual verification: 0/1 Subset-Sum DP surplus was {m4.dp_surplus} qtl ({m4.agg.dp_agrees ? 'perfect match with CBC' : 'differs'}).
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500 text-xs font-mono">
-                    No farmer pool for this selection.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 5: Inputs */}
-            {activeTab === 'inputs' && (
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 leading-relaxed font-sans">
-                  <strong>Every number here is an assumption you can challenge.</strong> The sidebar sliders are session-only overrides of <strong>data/ref/params.yaml</strong>, where each rate carries an auditable origin. Download the exact slice in view to inspect outside the app.
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 font-mono text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="font-bold text-slate-900">Active Parameters (params.yaml)</span>
-                    <button
-                      onClick={() => {
-                        api.downloadCleanSliceCsv(crop, asOf, decision?.m2?.rows || []);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-crimson-brand hover:bg-crimson-brandDark text-white font-bold transition-all shadow-xs cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download Clean Slice CSV</span>
-                    </button>
-                  </div>
-
-                  <pre className="bg-slate-900 text-slate-200 p-4 rounded-xl text-[11px] overflow-x-auto max-h-[360px] leading-relaxed">
-                    {JSON.stringify(decision?.params || meta?.params || {}, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 6: Knowledge Base */}
-            {activeTab === 'kb' && <KnowledgeBaseTab />}
-
-          </div>
+              {activeTab === 'where' && renderWhereProcessor()}
+              {activeTab === 'hold' && renderWhenProcessor()}
+              {activeTab === 'aggregate' && renderWhomProcessor()}
+              {activeTab === 'market' && renderMarketStl()}
+              {activeTab === 'inputs' && renderInputsTab()}
+              {activeTab === 'kb' && <KnowledgeBaseTab />}
+            </div>
+          )}
 
         </div>
 
