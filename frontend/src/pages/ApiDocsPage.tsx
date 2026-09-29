@@ -3,7 +3,7 @@ import { Terminal, Copy, Check, ExternalLink, Play, Server, Layers, ShieldCheck 
 import { API_ENDPOINTS } from '../data/siteData';
 
 export const ApiDocsPage: React.FC = () => {
-  const [selectedEndpoint, setSelectedEndpoint] = useState<string>('/api/decision');
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string>('GET:/api/decision');
   const [crop, setCrop] = useState<string>('Onion');
   const [asOf, setAsOf] = useState<string>('2025-06-11');
   const [volume, setVolume] = useState<number>(200);
@@ -11,11 +11,24 @@ export const ApiDocsPage: React.FC = () => {
   const [conservative, setConservative] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
-  const activeEp = API_ENDPOINTS.find(ep => ep.path === selectedEndpoint) || API_ENDPOINTS[2];
+  const activeEp = API_ENDPOINTS.find(ep => `${ep.method}:${ep.path}` === selectedEndpoint) || API_ENDPOINTS[2];
 
-  const generatedCurl = `curl -X '${activeEp.method}' \\
+  const generatedCurl = (() => {
+    if (activeEp.method === 'PUT') {
+      return `curl -X 'PUT' \\
+  'http://localhost:8000${activeEp.path}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{\n    "storage": {"rent_per_qtl_month": 6.0, "loan_interest": 0.09},\n    "freight": {"diesel_price": 90.0}\n  }'`;
+    }
+    if (activeEp.params === 'none') {
+      return `curl -X 'GET' \\
+  'http://localhost:8000${activeEp.path}' \\
+  -H 'accept: application/json'`;
+    }
+    return `curl -X '${activeEp.method}' \\
   'http://localhost:8000${activeEp.path}?crop=${crop}&as_of=${asOf}&volume=${volume}&horizon=${horizon}&conservative=${conservative}' \\
   -H 'accept: application/json'`;
+  })();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedCurl);
@@ -64,11 +77,12 @@ export const ApiDocsPage: React.FC = () => {
           </span>
           <div className="space-y-1">
             {API_ENDPOINTS.map((ep) => {
-              const isSelected = selectedEndpoint === ep.path;
+              const epKey = `${ep.method}:${ep.path}`;
+              const isSelected = selectedEndpoint === epKey;
               return (
                 <button
-                  key={ep.path}
-                  onClick={() => setSelectedEndpoint(ep.path)}
+                  key={epKey}
+                  onClick={() => setSelectedEndpoint(epKey)}
                   className={`w-full text-left p-3 rounded-xl border text-xs font-mono transition-all flex items-start gap-2.5 ${
                     isSelected
                       ? 'bg-crimson-50/70 border-crimson-brand text-slate-900 font-bold shadow-sm'

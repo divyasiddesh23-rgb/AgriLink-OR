@@ -108,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Navigation</span>
             <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               <CheckCircle className="w-3 h-3 text-emerald-600" />
-              <span>43 Tests · Pure Maths</span>
+              <span>50 Tests · Pure Maths</span>
             </div>
           </div>
           {navLinks.map((link) => (

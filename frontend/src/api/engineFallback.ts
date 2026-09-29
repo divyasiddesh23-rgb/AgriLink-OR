@@ -139,38 +139,96 @@ function calcRoadDistance(lat1: number, lon1: number, lat2: number, lon2: number
 function getVarietyMultiplier(crop: string, variety: string): number {
   if (!variety || variety === 'All') return 1.0;
 
+  const normalized = variety.toLowerCase().trim();
+
+  // 1. Direct dictionary mappings
   const multipliers: Record<string, Record<string, number>> = {
     Onion: {
-      'Nasik Red': 1.12,
-      'Local Bellary': 0.95,
-      'White Onion': 1.08,
-      'Small Onion': 1.25,
+      'nasik red': 1.14,
+      'bangalore rose': 1.28,
+      'bangalore-samall': 1.28,
+      'bellary red': 1.04,
+      'beelary-red': 1.04,
+      'white onion': 1.08,
+      'small onion': 1.25,
+      'puna': 1.15,
+      'pusa-red': 1.09,
+      'hybrid': 1.10,
+      'telagi': 0.94,
+      'local': 0.93,
+      'bombay (u.p.)': 1.06,
+      'other': 1.00,
     },
     Potato: {
-      'Jyoti': 1.06,
-      'Kufri': 1.10,
-      'Local': 0.94,
-      'Chipsona': 1.15,
+      'kufri chipsona': 1.18,
+      'chipsona': 1.18,
+      'kufri jyoti': 1.08,
+      'jyoti': 1.08,
+      'kufri bahar': 1.11,
+      'kufri': 1.11,
+      'chandermukhi': 1.09,
+      'jalander': 1.15,
+      'sinduri': 1.03,
+      'local': 0.91,
+      'other': 1.00,
     },
     Tomato: {
-      'Hybrid': 1.15,
-      'Local': 0.90,
-      'Roma': 1.08,
+      'hybrid': 1.16,
+      'roma plum': 1.10,
+      'roma': 1.10,
+      'desi': 0.92,
+      'local': 0.88,
+      'other': 1.00,
     },
     Wheat: {
-      'Sharbati': 1.22,
-      'Lok-1': 1.05,
-      'Sujata': 1.12,
+      'sharbati': 1.25,
+      'lok-1': 1.07,
+      'sujata': 1.14,
+      'kalyan sona': 1.16,
+      'sona': 1.16,
+      'super fine': 1.21,
+      'jawari': 1.11,
+      'white': 1.05,
+      'red': 1.02,
+      'mexican': 0.94,
+      'coarse': 0.89,
+      'local': 0.95,
+      'h.d.': 1.08,
+      'other': 1.00,
     },
     Rice: {
-      'Basmati': 1.45,
-      'Sona Masuri': 1.15,
-      'IR-64': 0.92,
-      'Jasmine': 1.30,
+      'basmati': 1.48,
+      'basumathi': 1.48,
+      'sona masuri': 1.16,
+      'sona': 1.16,
+      'jasmine': 1.32,
+      'super fine': 1.24,
+      'fine': 1.17,
+      'jaya': 1.05,
+      'hansa': 1.04,
+      'ir-64': 0.91,
+      'dappa': 0.95,
+      'coarse': 0.88,
+      'broken rice': 0.72,
+      'local': 0.94,
+      'other': 1.00,
     },
   };
 
-  return multipliers[crop]?.[variety] ?? 1.0;
+  const cropDict = multipliers[crop];
+  if (cropDict) {
+    if (cropDict[normalized] !== undefined) {
+      return cropDict[normalized];
+    }
+    // Partial search
+    for (const [key, mult] of Object.entries(cropDict)) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        return mult;
+      }
+    }
+  }
+
+  return 1.0;
 }
 
 // Crop Agronomic & Seasonality Econometric Profiles
@@ -253,11 +311,11 @@ const CROP_PROFILES: Record<string, CropProfile> = {
 export function getFallbackMeta(): MetaResponse {
   const crops = ['Onion', 'Potato', 'Tomato', 'Wheat', 'Rice'];
   const varieties: Record<string, string[]> = {
-    Onion: ['All', 'Nasik Red', 'Local Bellary', 'White Onion', 'Small Onion'],
-    Potato: ['All', 'Jyoti', 'Kufri', 'Local', 'Chipsona'],
-    Tomato: ['All', 'Hybrid', 'Local', 'Roma'],
-    Wheat: ['All', 'Sharbati', 'Lok-1', 'Sujata'],
-    Rice: ['All', 'Sona Masuri', 'IR-64', 'Basmati', 'Jasmine'],
+    Onion: ['All', 'Nasik Red', 'Bangalore Rose', 'Bellary Red', 'White Onion', 'Puna', 'Pusa-Red', 'Hybrid', 'Local'],
+    Potato: ['All', 'Kufri Jyoti', 'Kufri Chipsona', 'Kufri Bahar', 'Chandermukhi', 'Jalander', 'Sinduri', 'Local'],
+    Tomato: ['All', 'Hybrid', 'Roma Plum', 'Desi', 'Local'],
+    Wheat: ['All', 'Sharbati', 'Lok-1', 'Sujata', 'Kalyan Sona', 'Super Fine', 'Jawari', 'White', 'Local'],
+    Rice: ['All', 'Basmati', 'Sona Masuri', 'IR-64', 'Jasmine', 'Fine', 'Super Fine', 'Jaya', 'Local'],
   };
 
   const districts = Array.from(new Set(MANDIS_DATA.map((m) => m.district))).sort();

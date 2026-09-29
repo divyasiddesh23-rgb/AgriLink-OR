@@ -45,7 +45,7 @@ export const ArchitecturePage: React.FC = () => {
               <span className="text-xs text-slate-400">Pure Functions · No I/O · No DB · No UI</span>
             </div>
             <p className="text-slate-400 text-xs leading-relaxed mb-3">
-              Four modules (M1–M4) plus ingest/geo helpers. Takes DataFrames/arrays + params dict → returns typed results. Tested across 43 unit tests.
+              Four modules (M1–M4) plus ingest/geo helpers. Takes DataFrames/arrays + params dict → returns typed results. Tested across 50 unit tests.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300">
               <div className="bg-slate-900/60 p-2 rounded border border-slate-700">M1: stl_bands.py</div>

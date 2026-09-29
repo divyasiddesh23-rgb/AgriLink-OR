@@ -52,7 +52,7 @@ export const SITE_STATS = {
   sourceDumpRows: 737392,
   startDate: "2023-06-06",
   endDate: "2025-06-11",
-  testsPassing: 43,
+  testsPassing: 50,
   apiEndpoints: 11,
   apiPaths: 10,
   dataAgeDays: 475, // Stale warning threshold > 30 days
@@ -458,7 +458,7 @@ export const ZERO_ML_REASONS = [
     icon: "Landmark"
   },
   {
-    title: "4. Complete Reproducibility Across 43 Unit Tests",
+    title: "4. Complete Reproducibility Across 50 Unit Tests",
     desc: "Every module in src/ is a pure mathematical function: inputs in, answers out, with zero disk I/O, no network calls, and no random seeds. The exact same numbers result whether reading from local Parquet files or querying PostgreSQL via SQLAlchemy.",
     icon: "CheckCircle2"
   }

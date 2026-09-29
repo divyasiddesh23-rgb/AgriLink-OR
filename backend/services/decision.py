@@ -112,7 +112,12 @@ def latest_prices(df: pd.DataFrame, crop: str, variety: str | None,
     sub = view_of(df, crop, variety, as_of=as_of)
     cutoff = pd.Timestamp(as_of) - pd.Timedelta(days=window_days)
     in_win = sub[(sub["date"] >= cutoff) & (sub["date"] <= pd.Timestamp(as_of))]
-    return in_win.groupby("market")["modal_price"].median().dropna()
+    series = in_win.groupby("market")["modal_price"].median().dropna()
+    if series.empty and variety is not None and variety != "All":
+        base_sub = view_of(df, crop, "All", as_of=as_of)
+        base_win = base_sub[(base_sub["date"] >= cutoff) & (base_sub["date"] <= pd.Timestamp(as_of))]
+        series = base_win.groupby("market")["modal_price"].median().dropna()
+    return series
 
 
 def stl_eligible(df: pd.DataFrame, crop: str, variety: str | None,

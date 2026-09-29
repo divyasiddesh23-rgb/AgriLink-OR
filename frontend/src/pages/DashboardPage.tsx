@@ -293,10 +293,11 @@ export const DashboardPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [fetchDecisionData]);
 
-  // Varieties available for selected crop
+  // Varieties available for selected crop (deduplicated)
   const availableVarieties = useMemo(() => {
     if (!meta?.varieties || !meta.varieties[crop]) return ['All'];
-    return ['All', ...meta.varieties[crop]];
+    const vars = meta.varieties[crop];
+    return Array.from(new Set(['All', ...vars]));
   }, [meta, crop]);
 
   // States available for interstate selection
@@ -1100,24 +1101,59 @@ export const DashboardPage: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between text-xs font-semibold mb-1">
-                <span className="text-slate-600">Farm lat / lon:</span>
-                <span className="font-mono text-slate-900">{farmLat.toFixed(2)}, {farmLon.toFixed(2)}</span>
+                <span className="text-slate-600">FPO Farm Origin (Lat / Lon):</span>
+                <span className="font-mono text-slate-900 font-bold">{farmLat.toFixed(2)}° N, {farmLon.toFixed(2)}° E</span>
               </div>
-              <div className="grid grid-cols-2 gap-2 font-mono text-xs">
-                <input
-                  type="number"
-                  step="0.05"
-                  value={farmLat}
-                  onChange={(e) => setFarmLat(Number(e.target.value))}
-                  className="bg-slate-50 border border-slate-200 rounded p-1"
-                />
-                <input
-                  type="number"
-                  step="0.05"
-                  value={farmLon}
-                  onChange={(e) => setFarmLon(Number(e.target.value))}
-                  className="bg-slate-50 border border-slate-200 rounded p-1"
-                />
+              <div className="grid grid-cols-2 gap-2 font-mono text-xs mb-2">
+                <div>
+                  <span className="text-[10px] text-slate-400 block mb-0.5">Latitude (°N)</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={farmLat}
+                    onChange={(e) => setFarmLat(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block mb-0.5">Longitude (°E)</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={farmLon}
+                    onChange={(e) => setFarmLon(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Farm Location Presets */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">Quick Origin Hubs:</span>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+                  {[
+                    { label: '📍 Davangere Hub', lat: 14.30, lon: 76.00 },
+                    { label: '📍 Kolar FPO Belt', lat: 13.14, lon: 78.13 },
+                    { label: '📍 Hassan Potato Belt', lat: 13.00, lon: 76.10 },
+                    { label: '📍 Belagavi North', lat: 15.85, lon: 74.50 },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => {
+                        setFarmLat(p.lat);
+                        setFarmLon(p.lon);
+                      }}
+                      className={`p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                        Math.abs(farmLat - p.lat) < 0.05 && Math.abs(farmLon - p.lon) < 0.05
+                          ? 'bg-crimson-50 border-crimson-brand text-crimson-brandDark font-bold shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -1463,8 +1499,16 @@ export const DashboardPage: React.FC = () => {
 
                   {/* Arbitrage Opportunity Callout */}
                   {topMandi && boardTop && (
-                    <div className="bg-rose-50/60 border border-rose-200 border-l-4 border-l-crimson-brand rounded-xl p-3.5 text-xs text-slate-700">
-                      <strong>Board price is deceptive:</strong> Highest nominal quote is <strong>{boardTop.market}</strong> (₹{Math.round(boardTop.board_price).toLocaleString()}/qtl), but after diesel freight, shrink, and cess it nets ₹{Math.round(boardTop.net_per_qtl).toLocaleString()}. Shipping to <strong>{topMandi.market}</strong> puts <strong>₹{Math.round(topMandi.net_per_qtl - boardTop.net_per_qtl).toLocaleString()}/qtl more</strong> in your pocket!
+                    <div className="bg-rose-50/60 border border-rose-200 border-l-4 border-l-crimson-brand rounded-xl p-3.5 text-xs text-slate-700 leading-relaxed font-sans">
+                      {topMandi.market !== boardTop.market ? (
+                        <>
+                          <strong>Board price is deceptive:</strong> Highest nominal quote is <strong>{boardTop.market}</strong> (₹{Math.round(boardTop.board_price).toLocaleString()}/qtl), but after diesel freight, shrink, and cess it nets only ₹{Math.round(boardTop.net_per_qtl).toLocaleString()}. Shipping to optimal destination <strong>{topMandi.market}</strong> puts <strong>+₹{Math.round(topMandi.net_per_qtl - boardTop.net_per_qtl).toLocaleString()}/qtl more (+₹{Math.round((topMandi.net_per_qtl - boardTop.net_per_qtl) * volume).toLocaleString()} total gain)</strong> in your pocket!
+                        </>
+                      ) : (
+                        <>
+                          🚀 <strong>Highest Net Realization:</strong> <strong>{topMandi.market}</strong> is your top commercial choice, delivering ₹{Math.round(topMandi.net_per_qtl).toLocaleString()}/qtl in-hand. It secures <strong>+₹{Math.round(topMandi.arbitrage_vs_nearest || 0).toLocaleString()}/qtl (+₹{Math.round((topMandi.arbitrage_vs_nearest || 0) * volume).toLocaleString()} total advantage)</strong> over the nearest local mandi!
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1489,6 +1533,47 @@ export const DashboardPage: React.FC = () => {
                       return null;
                     })()
                   )}
+
+                  {/* Full Processors Embedded in View All 3 W's */}
+                  <div className="space-y-6 pt-4 border-t-2 border-dashed border-slate-200">
+                    <div className="bg-slate-100/90 border border-slate-200 p-2.5 rounded-xl text-center font-mono text-xs font-bold text-slate-700 flex items-center justify-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-crimson-brand animate-ping"></span>
+                      <span>ALL 3 OPERATIONS RESEARCH DECISION PROCESSORS ACTIVE BELOW</span>
+                    </div>
+
+                    {/* W1 Processor Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                        <span className="text-base">📍</span>
+                        <h3 className="font-extrabold text-sm text-slate-900 font-mono">
+                          W1 · WHERE TO SELL PROCESSOR (MODULE 2: NET-IN-HAND ARBITRAGE)
+                        </h3>
+                      </div>
+                      {renderWhereProcessor()}
+                    </div>
+
+                    {/* W2 Processor Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                        <span className="text-base">⏱️</span>
+                        <h3 className="font-extrabold text-sm text-slate-900 font-mono">
+                          W2 · WHEN TO SELL PROCESSOR (MODULE 3: STORAGE CARRY V(t) &amp; MILP)
+                        </h3>
+                      </div>
+                      {renderWhenProcessor()}
+                    </div>
+
+                    {/* W3 Processor Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                        <span className="text-base">🤝</span>
+                        <h3 className="font-extrabold text-sm text-slate-900 font-mono">
+                          W3 · TO WHOM TO SELL PROCESSOR (MODULE 4: BOUNDED KNAPSACK LOT AGGREGATION)
+                        </h3>
+                      </div>
+                      {renderWhomProcessor()}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
